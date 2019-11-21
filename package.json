@@ -1,5 +1,5 @@
 {
-  "name": "gnx",
+  "name": "@simtlix/gnx",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
@@ -19,5 +19,8 @@
     "eslint-plugin-node": "^10.0.0",
     "eslint-plugin-promise": "^4.2.1",
     "eslint-plugin-standard": "^4.0.1"
+  },
+  "publishConfig": { 
+    "registry": "https://npm.pkg.github.com/"
   }
 }
