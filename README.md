@@ -1,6 +1,8 @@
 # How to
 Install
-`npm install @simtlix/gnx --save`
+```bash
+npm install @simtlix/gnx --save
+```
 
 To use this lib:
 * Define your mongoose models
