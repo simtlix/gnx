@@ -7,7 +7,7 @@ npm install @simtlix/gnx --save
 To use this lib:
 * Define your mongoose models
 * Define your GraphQL types
-* Register models and types using `connect` function for *non embedded* types and `addNoEndpointType` function for *embedded* ones
+* Register models and types using `connect` function for **non embedded** types and `addNoEndpointType` function for **embedded** ones
 * Create the GraphQL schema using `createSchema` function
 
 # Example
