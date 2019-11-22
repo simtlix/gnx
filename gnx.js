@@ -156,7 +156,7 @@ const buildRootQuery = function (name) {
       args: { id: { type: GraphQLID } },
       resolve (parent, args) {
         /* Here we define how to get data from database source
-        this will return the book with id passed in argument
+        this will return the type with id passed in argument
         by the user */
         return type.model.findById(args.id)
       }
