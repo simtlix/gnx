@@ -71,7 +71,7 @@ const buildInputType = function (model, gqltype) {
     const fieldEntry = argTypes[fieldEntryName]
     const fieldArg = {}
 
-    if (fieldEntry.type instanceof GraphQLScalarType) {
+    if (fieldEntry.type instanceof GraphQLScalarType || fieldEntry.type instanceof GraphQLNonNull) {
       fieldArg.type = fieldEntry.type
     } else if (fieldEntry.type instanceof GraphQLObjectType) {
       if (fieldEntry.extensions && fieldEntry.extensions.relation) {
@@ -170,7 +170,7 @@ const buildRootQuery = function (name) {
       const fieldEntry = argTypes[fieldEntryName]
       argsObject[fieldEntryName] = {}
 
-      if (fieldEntry.type instanceof GraphQLScalarType) {
+      if (fieldEntry.type instanceof GraphQLScalarType || fieldEntry.type instanceof GraphQLNonNull) {
         argsObject[fieldEntryName].type = QLFilter
       } else if (fieldEntry.type instanceof GraphQLObjectType || fieldEntry.type instanceof GraphQLList) {
         argsObject[fieldEntryName].type = QLTypeFilterExpression
@@ -206,7 +206,7 @@ const materializeModel = function (args, gqltype, linkToParent) {
       continue
     }
 
-    if (fieldEntry.type instanceof GraphQLScalarType) {
+    if (fieldEntry.type instanceof GraphQLScalarType || fieldEntry.type instanceof GraphQLNonNull) {
       modelArgs[fieldEntryName] = args[fieldEntryName]
     } else if (fieldEntry.type instanceof GraphQLObjectType) {
       if (fieldEntry.extensions && fieldEntry.extensions.relation) {
