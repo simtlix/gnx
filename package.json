@@ -12,7 +12,7 @@
     "type": "git",
     "url": "https://github.com/simtlix/gnx.git"
   },
-  "dependencies": {
+  "peerDependencies": {
     "graphql": "^14.5.8",
     "mongoose": "^5.7.12"
   },

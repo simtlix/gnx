@@ -62,6 +62,14 @@ const QLTypeFilterExpression = new GraphQLInputObjectType({
   })
 })
 
+const isNonNullOfType = function (fieldEntryType, graphQLType) {
+  let isOfType = false
+  if (fieldEntryType instanceof GraphQLNonNull) {
+    isOfType = fieldEntryType.ofType instanceof graphQLType
+  }
+  return isOfType
+}
+
 const buildInputType = function (model, gqltype) {
   const argTypes = gqltype.getFields()
 
@@ -71,12 +79,12 @@ const buildInputType = function (model, gqltype) {
     const fieldEntry = argTypes[fieldEntryName]
     const fieldArg = {}
 
-    if (fieldEntry.type instanceof GraphQLScalarType || fieldEntry.type instanceof GraphQLNonNull) {
+    if (fieldEntry.type instanceof GraphQLScalarType || isNonNullOfType(fieldEntry.type, GraphQLScalarType)) {
       fieldArg.type = fieldEntry.type
-    } else if (fieldEntry.type instanceof GraphQLObjectType) {
+    } else if (fieldEntry.type instanceof GraphQLObjectType || isNonNullOfType(fieldEntry.type, GraphQLObjectType)) {
       if (fieldEntry.extensions && fieldEntry.extensions.relation) {
         if (!fieldEntry.extensions.relation.embedded) {
-          fieldArg.type = IdInputType
+          fieldArg.type = fieldEntry.type instanceof GraphQLNonNull ? new GraphQLNonNull(IdInputType) : IdInputType
         } else if (typesDict.types[fieldEntry.type.name].inputType) {
           fieldArg.type = typesDict.types[fieldEntry.type.name].inputType
         } else {
@@ -170,9 +178,9 @@ const buildRootQuery = function (name) {
       const fieldEntry = argTypes[fieldEntryName]
       argsObject[fieldEntryName] = {}
 
-      if (fieldEntry.type instanceof GraphQLScalarType || fieldEntry.type instanceof GraphQLNonNull) {
+      if (fieldEntry.type instanceof GraphQLScalarType || isNonNullOfType(fieldEntry.type, GraphQLScalarType)) {
         argsObject[fieldEntryName].type = QLFilter
-      } else if (fieldEntry.type instanceof GraphQLObjectType || fieldEntry.type instanceof GraphQLList) {
+      } else if (fieldEntry.type instanceof GraphQLObjectType || fieldEntry.type instanceof GraphQLList || isNonNullOfType(fieldEntry.type, GraphQLObjectType)) {
         argsObject[fieldEntryName].type = QLTypeFilterExpression
       }
     }
@@ -206,9 +214,9 @@ const materializeModel = function (args, gqltype, linkToParent) {
       continue
     }
 
-    if (fieldEntry.type instanceof GraphQLScalarType || fieldEntry.type instanceof GraphQLNonNull) {
+    if (fieldEntry.type instanceof GraphQLScalarType || isNonNullOfType(fieldEntry.type, GraphQLScalarType)) {
       modelArgs[fieldEntryName] = args[fieldEntryName]
-    } else if (fieldEntry.type instanceof GraphQLObjectType) {
+    } else if (fieldEntry.type instanceof GraphQLObjectType || isNonNullOfType(fieldEntry.type, GraphQLObjectType)) {
       if (fieldEntry.extensions && fieldEntry.extensions.relation) {
         if (!fieldEntry.extensions.relation.embedded) {
           modelArgs[fieldEntry.extensions.relation.connectionField] = new mongoose.Types.ObjectId(args[fieldEntryName].id)
