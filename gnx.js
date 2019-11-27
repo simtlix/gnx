@@ -27,7 +27,7 @@ const QLValue = new GraphQLScalarType({
     } else if (ast.kind === Kind.FLOAT) {
       return parseFloat(ast.value)
     } else if (ast.kind === Kind.BOOLEAN) {
-      return parseBoolean(ast.value)
+      return ast.value === 'true' || ast.value === true
     } else if (ast.kind === Kind.STRING) {
       return ast.value
     }
