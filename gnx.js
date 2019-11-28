@@ -6,6 +6,12 @@ const {
   GraphQLNonNull, GraphQLInputObjectType, GraphQLScalarType, Kind
 } = graphql
 
+const operations = {
+  SAVE: 'save',
+  UPDATE: 'update',
+  DELETE: 'delete'
+}
+
 /* Schema defines data on the Graph like object types(book type), relation between
 these object types and describes how it can reach into the graph to interact with
 the data to retrieve or mutate the data */
@@ -254,11 +260,21 @@ const materializeModel = function (args, gqltype, linkToParent) {
   return { modelArgs: modelArgs, collectionFields: collectionFields }
 }
 
-const saveObject = async function (Model, gqltype, args) {
+const executeOperation = async function (Model, gqltype, args, operation) {
   const session = await mongoose.startSession()
   session.startTransaction()
   try {
-    const newObject = await onSaveObject(Model, gqltype, args, session)
+    let newObject = null
+    switch (operation) {
+      case operations.SAVE:
+        newObject = await onSaveObject(Model, gqltype, args, session)
+        break
+      case operations.UPDATE:
+        newObject = await onUpdateSubject(Model, gqltype, args, session)
+        break
+      case operations.DELETE:
+      // TODO: implement
+    }
     console.log('before transaction')
     await session.commitTransaction()
     return newObject
@@ -270,44 +286,81 @@ const saveObject = async function (Model, gqltype, args) {
   }
 }
 
-const onSaveObject = async function (Model, gqltype, args, session, linkToParent) {
-  const result = materializeModel(args, gqltype, linkToParent)
-  const newObject = new Model(result.modelArgs)
-  console.log(JSON.stringify(newObject))
-  newObject.$session(session)
+const onUpdateSubject = async function (Model, gqltype, args, session, linkToParent) {
+  const materializedModel = materializeModel(args, gqltype, linkToParent)
+  const objectId = args.id
 
-  if (result.collectionFields) {
-    for (const collectionField in result.collectionFields) {
-      if (result.collectionFields[collectionField].added) {
-        const argTypes = gqltype.getFields()
-        const collectionGQLType = argTypes[collectionField].type.ofType
-        const connectionField = argTypes[collectionField].extensions.relation.connectionField
+  if (materializedModel.collectionFields) {
+    iterateonCollectionFields(materializeModel, gqltype, objectId, session)
+  }
 
-        result.collectionFields[collectionField].added.forEach(collectionItem => {
-          onSaveObject(typesDict.types[collectionGQLType.name].model, collectionGQLType, collectionItem, session, (item) => {
-            item[connectionField] = newObject._id
-          })
-        })
-      }
-      if (result.collectionFields[collectionField].updated) {
-        const argTypes = gqltype.getFields()
-        const collectionGQLType = argTypes[collectionField].type.ofType
-        const connectionField = argTypes[collectionField].extensions.relation.connectionField
+  const modifiedObject = materializedModel.modelArgs
+  const currentObject = await Model.findById({ _id: objectId })
 
-        result.collectionFields[collectionField].updated.forEach(collectionItem => {
-          onSaveObject(typesDict.types[collectionGQLType.name].model, collectionGQLType, collectionItem, session, (item) => {
-            item[connectionField] = newObject._id
-          })
-        })
-      }
-      if (result.collectionFields[collectionField].deleted) {
-        result.collectionFields[collectionField].deleted.forEach(collectionItem => {
-          // TODO
-        })
+  const argTypes = gqltype.getFields()
+  for (const fieldEntryName in argTypes) {
+    const fieldEntry = argTypes[fieldEntryName]
+    if (fieldEntry.extensions && fieldEntry.extensions.relation) {
+      if (fieldEntry.extensions.relation.embedded) {
+        const oldObjectData = currentObject[fieldEntryName]
+        const newObjectData = modifiedObject[fieldEntryName]
+        if (Array.isArray(oldObjectData) && Array.isArray(newObjectData)) {
+          modifiedObject[fieldEntryName] = newObjectData
+        } else {
+          modifiedObject[fieldEntryName] = { ...oldObjectData, ...newObjectData }
+        }
       }
     }
   }
+
+  return Model.findByIdAndUpdate(
+    objectId, modifiedObject, { new: true }
+  )
+}
+
+const onSaveObject = async function (Model, gqltype, args, session, linkToParent) {
+  const materializedModel = materializeModel(args, gqltype, linkToParent)
+  const newObject = new Model(materializedModel.modelArgs)
+  console.log(JSON.stringify(newObject))
+  newObject.$session(session)
+
+  if (materializedModel.collectionFields) {
+    iterateonCollectionFields(materializeModel, gqltype, newObject._id, session)
+  }
+
   return newObject.save()
+}
+
+const iterateonCollectionFields = function (materializedModel, gqltype, objectId, session) {
+  for (const collectionField in materializedModel.collectionFields) {
+    if (materializedModel.collectionFields[collectionField].added) {
+      const argTypes = gqltype.getFields()
+      const collectionGQLType = argTypes[collectionField].type.ofType
+      const connectionField = argTypes[collectionField].extensions.relation.connectionField
+
+      materializedModel.collectionFields[collectionField].added.forEach(collectionItem => {
+        onSaveObject(typesDict.types[collectionGQLType.name].model, collectionGQLType, collectionItem, session, (item) => {
+          item[connectionField] = objectId
+        })
+      })
+    }
+    if (materializedModel.collectionFields[collectionField].updated) {
+      const argTypes = gqltype.getFields()
+      const collectionGQLType = argTypes[collectionField].type.ofType
+      const connectionField = argTypes[collectionField].extensions.relation.connectionField
+
+      materializedModel.collectionFields[collectionField].updated.forEach(collectionItem => {
+        onUpdateSubject(typesDict.types[collectionGQLType.name].model, collectionGQLType, collectionItem, session, (item) => {
+          item[connectionField] = objectId
+        })
+      })
+    }
+    if (materializedModel.collectionFields[collectionField].deleted) {
+      materializedModel.collectionFields[collectionField].deleted.forEach(collectionItem => {
+        // TODO
+      })
+    }
+  }
 }
 
 const buildMutation = function (name) {
@@ -326,14 +379,14 @@ const buildMutation = function (name) {
         type: type.gqltype,
         args: argsObject,
         async resolve (parent, args) {
-          return saveObject(type.model, type.gqltype, args.input)
+          return executeOperation(type.model, type.gqltype, args.input, operations.SAVE)
         }
       }
       rootQueryArgs.fields['update' + type.simpleEntityEndpointName] = {
         type: type.gqltype,
         args: argsObject,
         async resolve (parent, args) {
-          return saveObject(type.model, type.gqltype, args.input)
+          return executeOperation(type.model, type.gqltype, args.input, operations.UPDATE)
         }
       }
     }
