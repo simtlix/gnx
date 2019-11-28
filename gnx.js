@@ -3,7 +3,8 @@ const mongoose = require('mongoose')
 
 const {
   GraphQLObjectType, GraphQLString, GraphQLID, GraphQLSchema, GraphQLList,
-  GraphQLNonNull, GraphQLInputObjectType, GraphQLScalarType, Kind
+  GraphQLNonNull, GraphQLInputObjectType, GraphQLScalarType, Kind,
+  GraphQLInt
 } = graphql
 
 const operations = {
@@ -33,7 +34,7 @@ const QLValue = new GraphQLScalarType({
     } else if (ast.kind === Kind.FLOAT) {
       return parseFloat(ast.value)
     } else if (ast.kind === Kind.BOOLEAN) {
-      return parseBoolean(ast.value)
+      return ast.value === 'true' || ast.value === true
     } else if (ast.kind === Kind.STRING) {
       return ast.value
     }
@@ -65,6 +66,14 @@ const QLTypeFilterExpression = new GraphQLInputObjectType({
   name: 'QLTypeFilterExpression',
   fields: () => ({
     terms: { type: new GraphQLList(QLTypeFilter) }
+  })
+})
+
+const QLPagination = new GraphQLInputObjectType({
+  name: 'QLPagination',
+  fields: () => ({
+    page: { type: new GraphQLNonNull(GraphQLInt) },
+    size: { type: new GraphQLNonNull(GraphQLInt) }
   })
 })
 
@@ -190,12 +199,22 @@ const buildRootQuery = function (name) {
         argsObject[fieldEntryName].type = QLTypeFilterExpression
       }
     }
+    argsObject.pagination = {}
+    argsObject.pagination.type = QLPagination
 
     rootQueryArgs.fields[type.listEntitiesEndpointName] = {
       type: new GraphQLList(type.gqltype),
       args: argsObject,
       resolve (parent, args) {
-        return type.model.find({})
+        buildQuery(args, type.gqltype)
+        let result = type.model.find({})
+        if (args.pagination) {
+          const pagination = args.pagination
+          if (pagination.page && pagination.size) {
+            result = result.limit(pagination.size).skip(pagination.size * (pagination.page - 1))
+          }
+        }
+        return result
       }
     }
   }
@@ -431,4 +450,111 @@ module.exports.addNoEndpointType = function (gqltype) {
     gqltype: gqltype,
     endpoint: false
   }
+}
+
+const buildQuery = async function (input, gqltype) {
+  const aggreagteClauses = {}
+  const matchesClauses = {}
+
+  for (const key in input) {
+    if (input.hasOwnProperty(key)) {
+      const filterField = input[key]
+      const qlField = gqltype.getFields()[key]
+
+      let result = buildQueryTerms(filterField, qlField, key)
+
+      console.log(JSON.stringify(result))
+
+    }
+  }
+}
+
+const buildQueryTerms = async function (filterField, qlField, fieldName) {
+  const aggreagteClauses = {}
+  const matchesClauses = {}
+
+  if (qlField.type instanceof GraphQLScalarType) {
+    let matchesClause = {}
+    // TODO only equal for now
+    matchesClause[fieldName] = filterField
+    matchesClauses[fieldName] = matchesClause
+  } else if (qlField.type instanceof GraphQLObjectType) {
+    filterField.terms.forEach(term => {
+      if (qlField.extensions && qlField.extensions.relation && !qlField.extensions.relation.embedded) {
+        let model = typesDict.types[qlField.type.name].model
+        let collectionName = model.collection.collectionName
+        let localFieldName = qlField.extensions.relation.connectionField
+
+        if (!aggreagteClauses[fieldName]) {
+          let lookup = {
+            $lookup: {
+              from: collectionName,
+              foreignField: '_id',
+              localField: localFieldName,
+              as: fieldName
+            }
+          }
+
+          aggreagteClauses[fieldName] = {
+            lookup: lookup,
+            unwind: { $unwind: { path: '$' + collectionName, preserveNullAndEmptyArrays: true } }
+          }
+        }
+        // autor:{terms{path:city.name}}
+
+        if (term.path.indexOf('.') < 0) {
+          let matchesClause = {}
+          matchesClause[fieldName + '.' + term.path] = term.value
+          matchesClauses[fieldName] = matchesClause
+        } else {
+          let currentGQLPathFieldType = qlField.type
+          let aliasPath = fieldName
+
+          term.path.split('.').forEach((pathFieldName) => {
+            let pathField = currentGQLPathFieldType.getFields()[pathFieldName]
+            if (pathField.type instanceof GraphQLScalarType) {
+              let matchesClause = {}
+              matchesClause[aliasPath + '.' + pathFieldName] = term.value
+              matchesClauses[aliasPath + '_' + pathFieldName] = matchesClause
+            } else if (pathField.type instanceof GraphQLObjectType) {
+              if (pathField.extensions && pathField.extensions.relation && !pathField.extensions.relation.embedded) {
+                aliasPath += '_' + pathFieldName
+                let pathModel = typesDict.types[pathField.type.name].model
+                let fieldPathCollectionName = pathModel.collection.collectionName
+                let pathLocalFieldName = pathField.extensions.relation.connectionField
+
+                if (!aggreagteClauses[aliasPath]) {
+                  let lookup = {
+                    $lookup: {
+                      from: fieldPathCollectionName,
+                      foreignField: '_id',
+                      localField: pathLocalFieldName,
+                      as: aliasPath
+                    }
+                  }
+
+                  aggreagteClauses[aliasPath] = {
+                    lookup: lookup,
+                    unwind: { $unwind: { path: '$' + fieldPathCollectionName, preserveNullAndEmptyArrays: true } }
+                  }
+                }
+              } else {
+                // aliasPath+="."+pathFieldName
+              }
+            } else if (pathField.type instanceof GraphQLList) {
+
+            }
+          }
+
+          )
+        }
+      } else {
+
+      }
+    })
+  } else if (qlField instanceof GraphQLList) {
+
+  }
+
+  return { aggreagteClauses: aggreagteClauses, matchesClauses: matchesClauses }
 }
