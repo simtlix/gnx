@@ -412,7 +412,6 @@ const buildMutation = function (name) {
 
     if (type.endpoint) {
       const argsObject = { input: { type: new GraphQLNonNull(type.inputType) } }
-      const argsDeleteObject = { id: { type: new GraphQLNonNull(GraphQLID) } }
 
       rootQueryArgs.fields['add' + type.simpleEntityEndpointName] = {
         type: type.gqltype,
@@ -430,7 +429,7 @@ const buildMutation = function (name) {
       }
       rootQueryArgs.fields['delete' + type.simpleEntityEndpointName] = {
         type: type.gqltype,
-        args: argsDeleteObject,
+        args: { id: { type: new GraphQLNonNull(GraphQLID) } },
         async resolve (parent, args) {
           return executeOperation(type.model, type.gqltype, args.id, operations.DELETE)
         }
