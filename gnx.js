@@ -305,6 +305,28 @@ const executeOperation = async function (Model, gqltype, args, operation) {
   }
 }
 
+const deleteObject = async function (Model, gqltype, args) {
+  const session = await mongoose.startSession()
+  session.startTransaction()
+  try {
+    const deletedObject = await onDeleteObject(Model, gqltype, args, session)
+    console.log('before transaction')
+    await session.commitTransaction()
+    return deletedObject
+  } catch (error) {
+    await session.abortTransaction()
+    throw error
+  } finally {
+    session.endSession()
+  }
+}
+
+const onDeleteObject = async function (Model, gqltype, args, session, linkToParent) {
+  const result = materializeModel(args, gqltype, linkToParent)
+  const deletedObject = new Model(result.modelArgs)
+  return Model.findByIdAndDelete(args, deletedObject.modelArgs).session(session)
+}
+
 const onUpdateSubject = async function (Model, gqltype, args, session, linkToParent) {
   const materializedModel = materializeModel(args, gqltype, linkToParent)
   const objectId = args.id
@@ -405,6 +427,8 @@ const buildMutation = function (name) {
 
     if (type.endpoint) {
       const argsObject = { input: { type: new GraphQLNonNull(type.inputType) } }
+      const argsDeleteObject = { id: { type: new GraphQLNonNull(GraphQLID) } }
+
       rootQueryArgs.fields['add' + type.simpleEntityEndpointName] = {
         type: type.gqltype,
         args: argsObject,
@@ -417,6 +441,13 @@ const buildMutation = function (name) {
         args: argsObject,
         async resolve (parent, args) {
           return executeOperation(type.model, type.gqltype, args.input, operations.UPDATE)
+        }
+      }
+      rootQueryArgs.fields['delete' + type.simpleEntityEndpointName] = {
+        type: type.gqltype,
+        args: argsDeleteObject,
+        async resolve (parent, args) {
+          return deleteObject(type.model, type.gqltype, args.id)
         }
       }
     }
