@@ -3,7 +3,8 @@ const mongoose = require('mongoose')
 
 const {
   GraphQLObjectType, GraphQLString, GraphQLID, GraphQLSchema, GraphQLList,
-  GraphQLNonNull, GraphQLInputObjectType, GraphQLScalarType, Kind
+  GraphQLNonNull, GraphQLInputObjectType, GraphQLScalarType, Kind,
+  GraphQLInt
 } = graphql
 
 /* Schema defines data on the Graph like object types(book type), relation between
@@ -59,6 +60,14 @@ const QLTypeFilterExpression = new GraphQLInputObjectType({
   name: 'QLTypeFilterExpression',
   fields: () => ({
     terms: { type: new GraphQLList(QLTypeFilter) }
+  })
+})
+
+const QLPagination = new GraphQLInputObjectType({
+  name: 'QLPagination',
+  fields: () => ({
+    page: { type: new GraphQLNonNull(GraphQLInt) },
+    size: { type: new GraphQLNonNull(GraphQLInt) }
   })
 })
 
@@ -184,12 +193,21 @@ const buildRootQuery = function (name) {
         argsObject[fieldEntryName].type = QLTypeFilterExpression
       }
     }
+    argsObject.pagination = {}
+    argsObject.pagination.type = QLPagination
 
     rootQueryArgs.fields[type.listEntitiesEndpointName] = {
       type: new GraphQLList(type.gqltype),
       args: argsObject,
       resolve (parent, args) {
-        return type.model.find({})
+        let result = type.model.find({})
+        if (args.pagination) {
+          const pagination = args.pagination
+          if (pagination.page && pagination.size) {
+            result = result.limit(pagination.size).skip(pagination.size * (pagination.page - 1))
+          }
+        }
+        return result
       }
     }
   }
