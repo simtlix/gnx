@@ -292,7 +292,8 @@ const executeOperation = async function (Model, gqltype, args, operation) {
         newObject = await onUpdateSubject(Model, gqltype, args, session)
         break
       case operations.DELETE:
-      // TODO: implement
+        newObject = await onDeleteObject(Model, gqltype, args, session)
+        break
     }
     console.log('before transaction')
     await session.commitTransaction()
@@ -303,6 +304,12 @@ const executeOperation = async function (Model, gqltype, args, operation) {
   } finally {
     session.endSession()
   }
+}
+
+const onDeleteObject = async function (Model, gqltype, args, session, linkToParent) {
+  const result = materializeModel(args, gqltype, linkToParent)
+  const deletedObject = new Model(result.modelArgs)
+  return Model.findByIdAndDelete(args, deletedObject.modelArgs).session(session)
 }
 
 const onUpdateSubject = async function (Model, gqltype, args, session, linkToParent) {
@@ -405,6 +412,7 @@ const buildMutation = function (name) {
 
     if (type.endpoint) {
       const argsObject = { input: { type: new GraphQLNonNull(type.inputType) } }
+
       rootQueryArgs.fields['add' + type.simpleEntityEndpointName] = {
         type: type.gqltype,
         args: argsObject,
@@ -417,6 +425,13 @@ const buildMutation = function (name) {
         args: argsObject,
         async resolve (parent, args) {
           return executeOperation(type.model, type.gqltype, args.input, operations.UPDATE)
+        }
+      }
+      rootQueryArgs.fields['delete' + type.simpleEntityEndpointName] = {
+        type: type.gqltype,
+        args: { id: { type: new GraphQLNonNull(GraphQLID) } },
+        async resolve (parent, args) {
+          return executeOperation(type.model, type.gqltype, args.id, operations.DELETE)
         }
       }
     }
