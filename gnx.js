@@ -319,15 +319,13 @@ const onUpdateSubject = async function (Model, gqltype, args, session, linkToPar
   const argTypes = gqltype.getFields()
   for (const fieldEntryName in argTypes) {
     const fieldEntry = argTypes[fieldEntryName]
-    if (fieldEntry.extensions && fieldEntry.extensions.relation) {
-      if (fieldEntry.extensions.relation.embedded) {
-        const oldObjectData = currentObject[fieldEntryName]
-        const newObjectData = modifiedObject[fieldEntryName]
-        if (Array.isArray(oldObjectData) && Array.isArray(newObjectData)) {
-          modifiedObject[fieldEntryName] = newObjectData
-        } else {
-          modifiedObject[fieldEntryName] = { ...oldObjectData, ...newObjectData }
-        }
+    if (fieldEntry.extensions && fieldEntry.extensions.relation && fieldEntry.extensions.relation.embedded) {
+      const oldObjectData = currentObject[fieldEntryName]
+      const newObjectData = modifiedObject[fieldEntryName]
+      if (Array.isArray(oldObjectData) && Array.isArray(newObjectData)) {
+        modifiedObject[fieldEntryName] = newObjectData
+      } else {
+        modifiedObject[fieldEntryName] = { ...oldObjectData, ...newObjectData }
       }
     }
   }
@@ -353,33 +351,46 @@ const onSaveObject = async function (Model, gqltype, args, session, linkToParent
 const iterateonCollectionFields = function (materializedModel, gqltype, objectId, session) {
   for (const collectionField in materializedModel.collectionFields) {
     if (materializedModel.collectionFields[collectionField].added) {
-      const argTypes = gqltype.getFields()
-      const collectionGQLType = argTypes[collectionField].type.ofType
-      const connectionField = argTypes[collectionField].extensions.relation.connectionField
+      executeItemFunction(gqltype, collectionField, objectId, session, materializedModel.collectionFields[collectionField].added, operations.SAVE)
+    }
+    if (materializedModel.collectionFields[collectionField].updated) {
+      executeItemFunction(gqltype, collectionField, objectId, session, materializedModel.collectionFields[collectionField].updated, operations.UPDATE)
+    }
+    if (materializedModel.collectionFields[collectionField].deleted) {
+      executeItemFunction(gqltype, collectionField, objectId, session, materializedModel.collectionFields[collectionField].updated, operations.DELETE)
+    }
+  }
+}
 
-      materializedModel.collectionFields[collectionField].added.forEach(collectionItem => {
+const executeItemFunction = function (gqltype, collectionField, objectId, session, collectionFieldsList, operationType) {
+  const argTypes = gqltype.getFields()
+  const collectionGQLType = argTypes[collectionField].type.ofType
+  const connectionField = argTypes[collectionField].extensions.relation.connectionField
+
+  let operationFunction = function () {}
+
+  switch (operationType) {
+    case operations.SAVE:
+      operationFunction = collectionItem => {
         onSaveObject(typesDict.types[collectionGQLType.name].model, collectionGQLType, collectionItem, session, (item) => {
           item[connectionField] = objectId
         })
-      })
-    }
-    if (materializedModel.collectionFields[collectionField].updated) {
-      const argTypes = gqltype.getFields()
-      const collectionGQLType = argTypes[collectionField].type.ofType
-      const connectionField = argTypes[collectionField].extensions.relation.connectionField
-
-      materializedModel.collectionFields[collectionField].updated.forEach(collectionItem => {
+      }
+      break
+    case operations.UPDATE:
+      operationFunction = collectionItem => {
         onUpdateSubject(typesDict.types[collectionGQLType.name].model, collectionGQLType, collectionItem, session, (item) => {
           item[connectionField] = objectId
         })
-      })
-    }
-    if (materializedModel.collectionFields[collectionField].deleted) {
-      materializedModel.collectionFields[collectionField].deleted.forEach(collectionItem => {
-        // TODO
-      })
-    }
+      }
+      break
+    case operations.DELETE:
+    // TODO: implement
   }
+
+  collectionFieldsList.forEach(collectionItem => {
+    operationFunction(collectionItem)
+  })
 }
 
 const buildMutation = function (name) {
