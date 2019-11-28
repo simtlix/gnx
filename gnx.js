@@ -292,27 +292,12 @@ const executeOperation = async function (Model, gqltype, args, operation) {
         newObject = await onUpdateSubject(Model, gqltype, args, session)
         break
       case operations.DELETE:
-      // TODO: implement
+        newObject = await onDeleteObject(Model, gqltype, args, session)
+        break
     }
     console.log('before transaction')
     await session.commitTransaction()
     return newObject
-  } catch (error) {
-    await session.abortTransaction()
-    throw error
-  } finally {
-    session.endSession()
-  }
-}
-
-const deleteObject = async function (Model, gqltype, args) {
-  const session = await mongoose.startSession()
-  session.startTransaction()
-  try {
-    const deletedObject = await onDeleteObject(Model, gqltype, args, session)
-    console.log('before transaction')
-    await session.commitTransaction()
-    return deletedObject
   } catch (error) {
     await session.abortTransaction()
     throw error
@@ -447,7 +432,7 @@ const buildMutation = function (name) {
         type: type.gqltype,
         args: argsDeleteObject,
         async resolve (parent, args) {
-          return deleteObject(type.model, type.gqltype, args.id)
+          return executeOperation(type.model, type.gqltype, args.id, operations.DELETE)
         }
       }
     }
