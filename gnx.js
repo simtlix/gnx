@@ -3,8 +3,15 @@ const mongoose = require('mongoose')
 
 const {
   GraphQLObjectType, GraphQLString, GraphQLID, GraphQLSchema, GraphQLList,
-  GraphQLNonNull, GraphQLInputObjectType, GraphQLScalarType, Kind
+  GraphQLNonNull, GraphQLInputObjectType, GraphQLScalarType, Kind,
+  GraphQLInt
 } = graphql
+
+const operations = {
+  SAVE: 'save',
+  UPDATE: 'update',
+  DELETE: 'delete'
+}
 
 /* Schema defines data on the Graph like object types(book type), relation between
 these object types and describes how it can reach into the graph to interact with
@@ -21,7 +28,7 @@ const QLValue = new GraphQLScalarType({
   name: 'QLValue',
   serialize: parseQLValue,
   parseValue: parseQLValue,
-  parseLiteral(ast) {
+  parseLiteral (ast) {
     if (ast.kind === Kind.INT) {
       return parseInt(ast.value, 10)
     } else if (ast.kind === Kind.FLOAT) {
@@ -35,7 +42,7 @@ const QLValue = new GraphQLScalarType({
   }
 })
 
-function parseQLValue(value) {
+function parseQLValue (value) {
   return value
 }
 
@@ -59,6 +66,14 @@ const QLTypeFilterExpression = new GraphQLInputObjectType({
   name: 'QLTypeFilterExpression',
   fields: () => ({
     terms: { type: new GraphQLList(QLTypeFilter) }
+  })
+})
+
+const QLPagination = new GraphQLInputObjectType({
+  name: 'QLPagination',
+  fields: () => ({
+    page: { type: new GraphQLNonNull(GraphQLInt) },
+    size: { type: new GraphQLNonNull(GraphQLInt) }
   })
 })
 
@@ -162,7 +177,7 @@ const buildRootQuery = function (name) {
     rootQueryArgs.fields[type.simpleEntityEndpointName] = {
       type: type.gqltype,
       args: { id: { type: GraphQLID } },
-      resolve(parent, args) {
+      resolve (parent, args) {
         /* Here we define how to get data from database source
         this will return the type with id passed in argument
         by the user */
@@ -184,14 +199,22 @@ const buildRootQuery = function (name) {
         argsObject[fieldEntryName].type = QLTypeFilterExpression
       }
     }
+    argsObject.pagination = {}
+    argsObject.pagination.type = QLPagination
 
     rootQueryArgs.fields[type.listEntitiesEndpointName] = {
       type: new GraphQLList(type.gqltype),
       args: argsObject,
-      resolve(parent, args) {
-
-        let result = buildQuery(args, type.gqltype)
-        return type.model.find({})
+      resolve (parent, args) {
+        buildQuery(args, type.gqltype)
+        let result = type.model.find({})
+        if (args.pagination) {
+          const pagination = args.pagination
+          if (pagination.page && pagination.size) {
+            result = result.limit(pagination.size).skip(pagination.size * (pagination.page - 1))
+          }
+        }
+        return result
       }
     }
   }
@@ -256,11 +279,22 @@ const materializeModel = function (args, gqltype, linkToParent) {
   return { modelArgs: modelArgs, collectionFields: collectionFields }
 }
 
-const saveObject = async function (Model, gqltype, args) {
+const executeOperation = async function (Model, gqltype, args, operation) {
   const session = await mongoose.startSession()
   session.startTransaction()
   try {
-    const newObject = await onSaveObject(Model, gqltype, args, session)
+    let newObject = null
+    switch (operation) {
+      case operations.SAVE:
+        newObject = await onSaveObject(Model, gqltype, args, session)
+        break
+      case operations.UPDATE:
+        newObject = await onUpdateSubject(Model, gqltype, args, session)
+        break
+      case operations.DELETE:
+        newObject = await onDeleteObject(Model, gqltype, args, session)
+        break
+    }
     console.log('before transaction')
     await session.commitTransaction()
     return newObject
@@ -272,44 +306,98 @@ const saveObject = async function (Model, gqltype, args) {
   }
 }
 
-const onSaveObject = async function (Model, gqltype, args, session, linkToParent) {
+const onDeleteObject = async function (Model, gqltype, args, session, linkToParent) {
   const result = materializeModel(args, gqltype, linkToParent)
-  const newObject = new Model(result.modelArgs)
-  console.log(JSON.stringify(newObject))
-  newObject.$session(session)
+  const deletedObject = new Model(result.modelArgs)
+  return Model.findByIdAndDelete(args, deletedObject.modelArgs).session(session)
+}
 
-  if (result.collectionFields) {
-    for (const collectionField in result.collectionFields) {
-      if (result.collectionFields[collectionField].added) {
-        const argTypes = gqltype.getFields()
-        const collectionGQLType = argTypes[collectionField].type.ofType
-        const connectionField = argTypes[collectionField].extensions.relation.connectionField
+const onUpdateSubject = async function (Model, gqltype, args, session, linkToParent) {
+  const materializedModel = materializeModel(args, gqltype, linkToParent)
+  const objectId = args.id
 
-        result.collectionFields[collectionField].added.forEach(collectionItem => {
-          onSaveObject(typesDict.types[collectionGQLType.name].model, collectionGQLType, collectionItem, session, (item) => {
-            item[connectionField] = newObject._id
-          })
-        })
-      }
-      if (result.collectionFields[collectionField].updated) {
-        const argTypes = gqltype.getFields()
-        const collectionGQLType = argTypes[collectionField].type.ofType
-        const connectionField = argTypes[collectionField].extensions.relation.connectionField
+  if (materializedModel.collectionFields) {
+    iterateonCollectionFields(materializeModel, gqltype, objectId, session)
+  }
 
-        result.collectionFields[collectionField].updated.forEach(collectionItem => {
-          onSaveObject(typesDict.types[collectionGQLType.name].model, collectionGQLType, collectionItem, session, (item) => {
-            item[connectionField] = newObject._id
-          })
-        })
-      }
-      if (result.collectionFields[collectionField].deleted) {
-        result.collectionFields[collectionField].deleted.forEach(collectionItem => {
-          // TODO
-        })
+  const modifiedObject = materializedModel.modelArgs
+  const currentObject = await Model.findById({ _id: objectId })
+
+  const argTypes = gqltype.getFields()
+  for (const fieldEntryName in argTypes) {
+    const fieldEntry = argTypes[fieldEntryName]
+    if (fieldEntry.extensions && fieldEntry.extensions.relation && fieldEntry.extensions.relation.embedded) {
+      const oldObjectData = currentObject[fieldEntryName]
+      const newObjectData = modifiedObject[fieldEntryName]
+      if (Array.isArray(oldObjectData) && Array.isArray(newObjectData)) {
+        modifiedObject[fieldEntryName] = newObjectData
+      } else {
+        modifiedObject[fieldEntryName] = { ...oldObjectData, ...newObjectData }
       }
     }
   }
+
+  return Model.findByIdAndUpdate(
+    objectId, modifiedObject, { new: true }
+  )
+}
+
+const onSaveObject = async function (Model, gqltype, args, session, linkToParent) {
+  const materializedModel = materializeModel(args, gqltype, linkToParent)
+  const newObject = new Model(materializedModel.modelArgs)
+  console.log(JSON.stringify(newObject))
+  newObject.$session(session)
+
+  if (materializedModel.collectionFields) {
+    iterateonCollectionFields(materializeModel, gqltype, newObject._id, session)
+  }
+
   return newObject.save()
+}
+
+const iterateonCollectionFields = function (materializedModel, gqltype, objectId, session) {
+  for (const collectionField in materializedModel.collectionFields) {
+    if (materializedModel.collectionFields[collectionField].added) {
+      executeItemFunction(gqltype, collectionField, objectId, session, materializedModel.collectionFields[collectionField].added, operations.SAVE)
+    }
+    if (materializedModel.collectionFields[collectionField].updated) {
+      executeItemFunction(gqltype, collectionField, objectId, session, materializedModel.collectionFields[collectionField].updated, operations.UPDATE)
+    }
+    if (materializedModel.collectionFields[collectionField].deleted) {
+      executeItemFunction(gqltype, collectionField, objectId, session, materializedModel.collectionFields[collectionField].updated, operations.DELETE)
+    }
+  }
+}
+
+const executeItemFunction = function (gqltype, collectionField, objectId, session, collectionFieldsList, operationType) {
+  const argTypes = gqltype.getFields()
+  const collectionGQLType = argTypes[collectionField].type.ofType
+  const connectionField = argTypes[collectionField].extensions.relation.connectionField
+
+  let operationFunction = function () {}
+
+  switch (operationType) {
+    case operations.SAVE:
+      operationFunction = collectionItem => {
+        onSaveObject(typesDict.types[collectionGQLType.name].model, collectionGQLType, collectionItem, session, (item) => {
+          item[connectionField] = objectId
+        })
+      }
+      break
+    case operations.UPDATE:
+      operationFunction = collectionItem => {
+        onUpdateSubject(typesDict.types[collectionGQLType.name].model, collectionGQLType, collectionItem, session, (item) => {
+          item[connectionField] = objectId
+        })
+      }
+      break
+    case operations.DELETE:
+    // TODO: implement
+  }
+
+  collectionFieldsList.forEach(collectionItem => {
+    operationFunction(collectionItem)
+  })
 }
 
 const buildMutation = function (name) {
@@ -324,18 +412,26 @@ const buildMutation = function (name) {
 
     if (type.endpoint) {
       const argsObject = { input: { type: new GraphQLNonNull(type.inputType) } }
+
       rootQueryArgs.fields['add' + type.simpleEntityEndpointName] = {
         type: type.gqltype,
         args: argsObject,
-        async resolve(parent, args) {
-          return saveObject(type.model, type.gqltype, args.input)
+        async resolve (parent, args) {
+          return executeOperation(type.model, type.gqltype, args.input, operations.SAVE)
         }
       }
       rootQueryArgs.fields['update' + type.simpleEntityEndpointName] = {
         type: type.gqltype,
         args: argsObject,
-        async resolve(parent, args) {
-          return saveObject(type.model, type.gqltype, args.input)
+        async resolve (parent, args) {
+          return executeOperation(type.model, type.gqltype, args.input, operations.UPDATE)
+        }
+      }
+      rootQueryArgs.fields['delete' + type.simpleEntityEndpointName] = {
+        type: type.gqltype,
+        args: { id: { type: new GraphQLNonNull(GraphQLID) } },
+        async resolve (parent, args) {
+          return executeOperation(type.model, type.gqltype, args.id, operations.DELETE)
         }
       }
     }
@@ -386,7 +482,6 @@ const buildQuery = async function (input, gqltype) {
   const aggreagteClauses = {}
   const matchesClauses = {}
 
-
   for (const key in input) {
     if (input.hasOwnProperty(key)) {
       const filterField = input[key]
@@ -401,25 +496,20 @@ const buildQuery = async function (input, gqltype) {
 }
 
 const buildQueryTerms = async function (filterField, qlField, fieldName) {
-
   const aggreagteClauses = {}
   const matchesClauses = {}
 
   if (qlField.type instanceof GraphQLScalarType) {
     let matchesClause = {}
-    //TODO only equal for now
+    // TODO only equal for now
     matchesClause[fieldName] = filterField
     matchesClauses[fieldName] = matchesClause
-
   } else if (qlField.type instanceof GraphQLObjectType) {
-
     filterField.terms.forEach(term => {
-
       if (qlField.extensions && qlField.extensions.relation && !qlField.extensions.relation.embedded) {
         let model = typesDict.types[qlField.type.name].model
         let collectionName = model.collection.collectionName
-        let localFieldName = qlField.extensions.relation.connectionField;
-
+        let localFieldName = qlField.extensions.relation.connectionField
 
         if (!aggreagteClauses[fieldName]) {
           let lookup = {
@@ -432,31 +522,29 @@ const buildQueryTerms = async function (filterField, qlField, fieldName) {
           }
 
           aggreagteClauses[fieldName] = {
-            'lookup': lookup,
-            'unwind': { $unwind: { path: "$" + collectionName, preserveNullAndEmptyArrays: true } }
+            lookup: lookup,
+            unwind: { $unwind: { path: '$' + collectionName, preserveNullAndEmptyArrays: true } }
           }
-
         }
+        // autor:{terms{path:city.name}}
 
-        //autor:{terms{path:city.name}}
-
-        if (term.path.indexOf(".") < 0) {
+        if (term.path.indexOf('.') < 0) {
           let matchesClause = {}
-          matchesClause[fieldName + "." + term.path] = term.value
+          matchesClause[fieldName + '.' + term.path] = term.value
           matchesClauses[fieldName] = matchesClause
         } else {
-          let currentGQLPathFieldType = qlField.type;
+          let currentGQLPathFieldType = qlField.type
           let aliasPath = fieldName
 
-          term.path.split(".").forEach((pathFieldName) => {
+          term.path.split('.').forEach((pathFieldName) => {
             let pathField = currentGQLPathFieldType.getFields()[pathFieldName]
             if (pathField.type instanceof GraphQLScalarType) {
               let matchesClause = {}
-              matchesClause[aliasPath + "." + pathFieldName] = term.value
-              matchesClauses[aliasPath + "_" + pathFieldName] = matchesClause
+              matchesClause[aliasPath + '.' + pathFieldName] = term.value
+              matchesClauses[aliasPath + '_' + pathFieldName] = matchesClause
             } else if (pathField.type instanceof GraphQLObjectType) {
               if (pathField.extensions && pathField.extensions.relation && !pathField.extensions.relation.embedded) {
-                aliasPath += "_" + pathFieldName
+                aliasPath += '_' + pathFieldName
                 let pathModel = typesDict.types[pathField.type.name].model
                 let fieldPathCollectionName = pathModel.collection.collectionName
                 let pathLocalFieldName = pathField.extensions.relation.connectionField
@@ -472,20 +560,16 @@ const buildQueryTerms = async function (filterField, qlField, fieldName) {
                   }
 
                   aggreagteClauses[aliasPath] = {
-                    'lookup': lookup,
-                    'unwind': { $unwind: { path: "$" + fieldPathCollectionName, preserveNullAndEmptyArrays: true } }
+                    lookup: lookup,
+                    unwind: { $unwind: { path: '$' + fieldPathCollectionName, preserveNullAndEmptyArrays: true } }
                   }
-
                 }
-
               } else {
-                //aliasPath+="."+pathFieldName
+                // aliasPath+="."+pathFieldName
               }
             } else if (pathField.type instanceof GraphQLList) {
 
             }
-
-
           }
 
           )
@@ -493,19 +577,10 @@ const buildQueryTerms = async function (filterField, qlField, fieldName) {
       } else {
 
       }
-
     })
-
-
-
-
-
-
   } else if (qlField instanceof GraphQLList) {
 
   }
 
-
-  return { 'aggreagteClauses': aggreagteClauses, 'matchesClauses': matchesClauses }
-
+  return { aggreagteClauses: aggreagteClauses, matchesClauses: matchesClauses }
 }
