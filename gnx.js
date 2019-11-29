@@ -205,9 +205,16 @@ const buildRootQuery = function (name) {
     rootQueryArgs.fields[type.listEntitiesEndpointName] = {
       type: new GraphQLList(type.gqltype),
       args: argsObject,
-      resolve (parent, args) {
-        buildQuery(args, type.gqltype)
-        let result = type.model.find({})
+      async resolve (parent, args) {
+        let aggreagteClauses = await buildQuery(args, type.gqltype)
+        let result
+        if(aggreagteClauses.length==0){
+          result = await type.model.find({})
+        }else{
+          result = await type.model.aggregate(aggreagteClauses)
+          console.log(result)
+        }
+
         if (args.pagination) {
           const pagination = args.pagination
           if (pagination.page && pagination.size) {
@@ -480,8 +487,8 @@ module.exports.addNoEndpointType = function (gqltype) {
 
 const buildQuery = async function (input, gqltype) {
   const aggreagteClauses = []
-  const matchesClauses = []
-
+  const matchesClauses = {$match:{}}
+  let addMatch = false;
 
   for (const key in input) {
     if (input.hasOwnProperty(key)) {
@@ -500,15 +507,29 @@ const buildQuery = async function (input, gqltype) {
         for (const match in result.matchesClauses) {
           if (result.matchesClauses.hasOwnProperty(match)) {
             const matchClause = result.matchesClauses[match]
-            matchesClauses.push(matchClause)
+            for (const key in matchClause) {
+              if (matchClause.hasOwnProperty(key)) {
+                const value = matchClause[key];
+                matchesClauses.$match[key]=value
+                addMatch = true
+              }
+            }
+           
           }
         }
       }
+
+
 
       console.log(JSON.stringify(result))
 
     }
   }
+
+  if(addMatch)
+    aggreagteClauses.push(matchesClauses)
+
+  return aggreagteClauses;
 }
 
 const buildQueryTerms = async function (filterField, qlField, fieldName) {
