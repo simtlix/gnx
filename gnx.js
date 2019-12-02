@@ -1,5 +1,6 @@
 const graphql = require('graphql')
 const mongoose = require('mongoose')
+mongoose.set('useFindAndModify', false)
 
 const {
   GraphQLObjectType, GraphQLString, GraphQLID, GraphQLSchema, GraphQLList,
@@ -89,19 +90,28 @@ const buildInputType = function (model, gqltype) {
   const argTypes = gqltype.getFields()
 
   const fieldsArgs = {}
+  const fieldsArgForUpdate = {}
 
   for (const fieldEntryName in argTypes) {
     const fieldEntry = argTypes[fieldEntryName]
     const fieldArg = {}
+    const fieldArgForUpdate = {}
 
     if (fieldEntry.type instanceof GraphQLScalarType || isNonNullOfType(fieldEntry.type, GraphQLScalarType)) {
       fieldArg.type = fieldEntry.type
+      fieldArgForUpdate.type = fieldEntry.type instanceof GraphQLNonNull ? fieldEntry.type.ofType : fieldEntry.type
+      if (fieldEntry.type === GraphQLID) {
+        fieldArgForUpdate.type = new GraphQLNonNull(GraphQLID)
+      }
     } else if (fieldEntry.type instanceof GraphQLObjectType || isNonNullOfType(fieldEntry.type, GraphQLObjectType)) {
       if (fieldEntry.extensions && fieldEntry.extensions.relation) {
         if (!fieldEntry.extensions.relation.embedded) {
           fieldArg.type = fieldEntry.type instanceof GraphQLNonNull ? new GraphQLNonNull(IdInputType) : IdInputType
+          fieldArgForUpdate.type = fieldEntry.type instanceof GraphQLNonNull ? new GraphQLNonNull(IdInputType) : IdInputType
         } else if (typesDict.types[fieldEntry.type.name].inputType) {
           fieldArg.type = typesDict.types[fieldEntry.type.name].inputType
+        } else if (typesDictForUpdate.types[fieldEntry.type.name].inputType) {
+          fieldArgForUpdate.type = typesDictForUpdate.types[fieldEntry.type.name].inputType
         } else {
           return null
         }
@@ -129,10 +139,33 @@ const buildInputType = function (model, gqltype) {
       } else {
         return null
       }
+
+      if (typesDictForUpdate.types[ofType.name].inputType) {
+        if (!fieldEntry.extensions || !fieldEntry.extensions.relation || !fieldEntry.extensions.relation.embedded) {
+          const oneToMany = new GraphQLInputObjectType({
+            name: 'OneToMany' + fieldEntryName,
+            fields: () => ({
+              added: { type: new GraphQLList(typesDictForUpdate.types[ofType.name].inputType) },
+              updated: { type: new GraphQLList(typesDictForUpdate.types[ofType.name].inputType) },
+              deleted: { type: new GraphQLList(typesDictForUpdate.types[ofType.name].inputType) }
+            })
+          })
+
+          fieldArgForUpdate.type = oneToMany
+        } else if (fieldEntry.extensions && fieldEntry.extensions.relation && fieldEntry.extensions.relation.embedded) {
+          fieldArgForUpdate.type = new GraphQLList(typesDictForUpdate.types[ofType.name].inputType)
+        }
+      } else {
+        return null
+      }
     }
 
     if (fieldArg.type) {
       fieldsArgs[fieldEntryName] = fieldArg
+    }
+
+    if (fieldArgForUpdate.type) {
+      fieldsArgForUpdate[fieldEntryName] = fieldArgForUpdate
     }
   }
 
@@ -141,7 +174,12 @@ const buildInputType = function (model, gqltype) {
     fields: fieldsArgs
   }
 
-  return new GraphQLInputObjectType(inputTypeBody)
+  const inputTypeBodyForUpdate = {
+    name: gqltype.name + 'InputForUpdate',
+    fields: fieldsArgForUpdate
+  }
+
+  return { inputTypeBody: new GraphQLInputObjectType(inputTypeBody), inputTypeBodyForUpdate: new GraphQLInputObjectType(inputTypeBodyForUpdate) }
 }
 
 const buildPendingInputTypes = function (waitingInputType) {
@@ -151,10 +189,12 @@ const buildPendingInputTypes = function (waitingInputType) {
   for (const pendingInputTypeName in waitingInputType) {
     const model = waitingInputType[pendingInputTypeName].model
     const gqltype = waitingInputType[pendingInputTypeName].gqltype
-    const builtInputType = buildInputType(model, gqltype)
+    const builtInputType = buildInputType(model, gqltype).inputTypeBody
+    const builtInputTypeForUpdate = buildInputType(model, gqltype).inputTypeBodyForUpdate
 
-    if (builtInputType) {
+    if (builtInputType && builtInputTypeForUpdate) {
       typesDict.types[gqltype.name].inputType = builtInputType
+      typesDictForUpdate.types[gqltype.name].inputType = builtInputTypeForUpdate
     } else {
       stillWaitingInputType[pendingInputTypeName] = waitingInputType[pendingInputTypeName]
       isThereAtLeastOneWaiting = true
@@ -313,7 +353,7 @@ const onUpdateSubject = async function (Model, gqltype, args, session, linkToPar
     iterateonCollectionFields(materializeModel, gqltype, objectId, session)
   }
 
-  const modifiedObject = materializedModel.modelArgs
+  let modifiedObject = materializedModel.modelArgs
   const currentObject = await Model.findById({ _id: objectId })
 
   const argTypes = gqltype.getFields()
@@ -327,6 +367,10 @@ const onUpdateSubject = async function (Model, gqltype, args, session, linkToPar
       } else {
         modifiedObject[fieldEntryName] = { ...oldObjectData, ...newObjectData }
       }
+    }
+
+    if (args[fieldEntryName] === null && !(argTypes[fieldEntryName].type instanceof GraphQLNonNull)) {
+      modifiedObject = { ...modifiedObject, $unset: { [fieldEntryName]: '' } }
     }
   }
 
@@ -412,6 +456,21 @@ const buildMutation = function (name) {
           return executeOperation(type.model, type.gqltype, args.input, operations.SAVE)
         }
       }
+      rootQueryArgs.fields['delete' + type.simpleEntityEndpointName] = {
+        type: type.gqltype,
+        args: { id: { type: new GraphQLNonNull(GraphQLID) } },
+        async resolve (parent, args) {
+          return executeOperation(type.model, type.gqltype, args.id, operations.DELETE)
+        }
+      }
+    }
+  }
+
+  for (const entry in typesDictForUpdate.types) {
+    const type = typesDictForUpdate.types[entry]
+
+    if (type.endpoint) {
+      const argsObject = { input: { type: new GraphQLNonNull(type.inputType) } }
       rootQueryArgs.fields['update' + type.simpleEntityEndpointName] = {
         type: type.gqltype,
         args: argsObject,
@@ -427,6 +486,7 @@ const buildMutation = function (name) {
 
 const typesDict = { types: {} }
 const waitingInputType = {}
+const typesDictForUpdate = { types: {} }
 
 /* Creating a new GraphQL Schema, with options query which defines query
 we will allow users to use when they are making request. */
@@ -450,6 +510,8 @@ module.exports.connect = function (model, gqltype, simpleEntityEndpointName, lis
     listEntitiesEndpointName: listEntitiesEndpointName,
     endpoint: true
   }
+
+  typesDictForUpdate.types[gqltype.name] = typesDict.types[gqltype.name]
 }
 
 module.exports.addNoEndpointType = function (gqltype) {
@@ -461,6 +523,8 @@ module.exports.addNoEndpointType = function (gqltype) {
     gqltype: gqltype,
     endpoint: false
   }
+
+  typesDictForUpdate.types[gqltype.name] = typesDict.types[gqltype.name]
 }
 
 const buildQuery = async function (input, gqltype) {
