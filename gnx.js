@@ -4,7 +4,7 @@ const mongoose = require('mongoose')
 const {
   GraphQLObjectType, GraphQLString, GraphQLID, GraphQLSchema, GraphQLList,
   GraphQLNonNull, GraphQLInputObjectType, GraphQLScalarType, Kind,
-  GraphQLInt
+  GraphQLInt, GraphQLEnumType
 } = graphql
 
 const operations = {
@@ -75,6 +75,33 @@ const QLPagination = new GraphQLInputObjectType({
     page: { type: new GraphQLNonNull(GraphQLInt) },
     size: { type: new GraphQLNonNull(GraphQLInt) }
   })
+})
+
+const QLSortExpression = new GraphQLInputObjectType({
+  name: 'QLSortExpression',
+  fields: () => ({
+    terms: { type: new GraphQLList(QLSort) }
+  })
+})
+
+const QLSort = new GraphQLInputObjectType({
+  name: 'QLSort',
+  fields: () => ({
+    field: { type: new GraphQLNonNull(GraphQLString) },
+    order: { type: new GraphQLNonNull(QLSortOrder) }
+  })
+})
+
+const QLSortOrder = new GraphQLEnumType({
+  name: 'QLSortOrder',
+  values: {
+    DESC: {
+      value: -1
+    },
+    ASC: {
+      value: 1
+    }
+  }
 })
 
 const isNonNullOfType = function (fieldEntryType, graphQLType) {
@@ -199,20 +226,27 @@ const buildRootQuery = function (name) {
         argsObject[fieldEntryName].type = QLTypeFilterExpression
       }
     }
+
     argsObject.pagination = {}
     argsObject.pagination.type = QLPagination
+
+    argsObject.sort = {}
+    argsObject.sort.type = QLSortExpression
 
     rootQueryArgs.fields[type.listEntitiesEndpointName] = {
       type: new GraphQLList(type.gqltype),
       args: argsObject,
       resolve (parent, args) {
-        buildQuery(args, type.gqltype)
+        // buildQuery(args, type.gqltype)
         let result = type.model.find({})
         if (args.pagination) {
           const pagination = args.pagination
           if (pagination.page && pagination.size) {
             result = result.limit(pagination.size).skip(pagination.size * (pagination.page - 1))
           }
+        }
+        if (args.sort) {
+          console.log(args.sort)
         }
         return result
       }
