@@ -145,8 +145,8 @@ const buildInputType = function (model, gqltype) {
         console.warn('Configuration issue: Field ' + fieldEntryName + ' does not define extensions.relation')
       }
     } else if (fieldEntry.type instanceof GraphQLList) {
-      fieldArg.type = graphQLListInputType(typesDict, fieldEntry, fieldEntryName)
-      fieldArgForUpdate.type = graphQLListInputType(typesDictForUpdate, fieldEntry, fieldEntryName)
+      fieldArg.type = graphQLListInputType(typesDict, fieldEntry, fieldEntryName, 'A')
+      fieldArgForUpdate.type = graphQLListInputType(typesDictForUpdate, fieldEntry, fieldEntryName, 'U')
     }
 
     if (fieldArg.type) {
@@ -171,12 +171,12 @@ const buildInputType = function (model, gqltype) {
   return { inputTypeBody: new GraphQLInputObjectType(inputTypeBody), inputTypeBodyForUpdate: new GraphQLInputObjectType(inputTypeBodyForUpdate) }
 }
 
-const graphQLListInputType = function (dict, fieldEntry, fieldEntryName) {
+const graphQLListInputType = function (dict, fieldEntry, fieldEntryName, inputNamePrefix) {
   const ofType = fieldEntry.type.ofType
   if (dict.types[ofType.name].inputType) {
     if (!fieldEntry.extensions || !fieldEntry.extensions.relation || !fieldEntry.extensions.relation.embedded) {
       const oneToMany = new GraphQLInputObjectType({
-        name: 'OneToMany' + fieldEntryName,
+        name: 'OneToMany' + inputNamePrefix + fieldEntryName,
         fields: () => ({
           added: { type: new GraphQLList(dict.types[ofType.name].inputType) },
           updated: { type: new GraphQLList(dict.types[ofType.name].inputType) },
