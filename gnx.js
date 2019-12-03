@@ -268,21 +268,6 @@ const buildRootQuery = function (name) {
         } else {
           result = type.model.aggregate(aggregateClauses)
         }
-
-        if (args.pagination) {
-          const pagination = args.pagination
-          if (pagination.page && pagination.size) {
-            result = result.limit(pagination.size).skip(pagination.size * (pagination.page - 1))
-          }
-        }
-        if (args.sort) {
-          console.log(args.sort)
-          const sortExpressions = []
-          for (const sort in args.sort) {
-            sortExpressions.push([sort.field, sort.order])
-          }
-          result = result.sort(sortExpressions)
-        }
         return result
       }
     }
@@ -571,9 +556,14 @@ const buildQuery = async function (input, gqltype) {
   const aggregateClauses = []
   const matchesClauses = { $match: {} }
   let addMatch = false
+  let limitClause = {}
+  let skipClause = {}
+  let addPagination = false
+  let sortClause = {}
+  let addSort = false
 
   for (const key in input) {
-    if (Object.prototype.hasOwnProperty.call(input, key)) {
+    if (Object.prototype.hasOwnProperty.call(input, key) && key !== 'pagination' && key !== 'sort') {
       const filterField = input[key]
       const qlField = gqltype.getFields()[key]
 
@@ -598,11 +588,35 @@ const buildQuery = async function (input, gqltype) {
           }
         }
       }
+    } else if (key === 'pagination') {
+      if (input[key].page && input[key].size) {
+        const skip = input[key].size * (input[key].page - 1)
+        limitClause = { $limit: input[key].size + skip }
+        skipClause = { $skip: skip }
+        addPagination = true
+      }
+    } else if (key === 'sort') {
+      const sortExpressions = {}
+      input[key].terms.forEach(function (sort) {
+        console.log(sort)
+        sortExpressions[sort.field] = sort.order
+      })
+      sortClause = { $sort: sortExpressions }
+      addSort = true
     }
   }
 
   if (addMatch) {
     aggregateClauses.push(matchesClauses)
+  }
+
+  if (addSort) {
+    aggregateClauses.push(sortClause)
+  }
+
+  if (addPagination) {
+    aggregateClauses.push(limitClause)
+    aggregateClauses.push(skipClause)
   }
 
   console.log(JSON.stringify(aggregateClauses))
