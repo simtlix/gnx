@@ -209,10 +209,9 @@ const buildRootQuery = function (name) {
         let aggreagteClauses = await buildQuery(args, type.gqltype)
         let result
         if(aggreagteClauses.length==0){
-          result = await type.model.find({})
+          result = type.model.find({})
         }else{
-          result = await type.model.aggregate(aggreagteClauses)
-          console.log(result)
+          result = type.model.aggregate(aggreagteClauses)
         }
 
         if (args.pagination) {
@@ -518,11 +517,6 @@ const buildQuery = async function (input, gqltype) {
           }
         }
       }
-
-
-
-      console.log(JSON.stringify(result))
-
     }
   }
 
