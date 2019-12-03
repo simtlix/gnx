@@ -1,5 +1,6 @@
 const graphql = require('graphql')
 const mongoose = require('mongoose')
+mongoose.set('useFindAndModify', false)
 
 const {
   GraphQLObjectType, GraphQLString, GraphQLID, GraphQLSchema, GraphQLList,
@@ -116,19 +117,28 @@ const buildInputType = function (model, gqltype) {
   const argTypes = gqltype.getFields()
 
   const fieldsArgs = {}
+  const fieldsArgForUpdate = {}
 
   for (const fieldEntryName in argTypes) {
     const fieldEntry = argTypes[fieldEntryName]
     const fieldArg = {}
+    const fieldArgForUpdate = {}
 
     if (fieldEntry.type instanceof GraphQLScalarType || isNonNullOfType(fieldEntry.type, GraphQLScalarType)) {
       fieldArg.type = fieldEntry.type
+      fieldArgForUpdate.type = fieldEntry.type instanceof GraphQLNonNull ? fieldEntry.type.ofType : fieldEntry.type
+      if (fieldEntry.type === GraphQLID) {
+        fieldArgForUpdate.type = new GraphQLNonNull(GraphQLID)
+      }
     } else if (fieldEntry.type instanceof GraphQLObjectType || isNonNullOfType(fieldEntry.type, GraphQLObjectType)) {
       if (fieldEntry.extensions && fieldEntry.extensions.relation) {
         if (!fieldEntry.extensions.relation.embedded) {
           fieldArg.type = fieldEntry.type instanceof GraphQLNonNull ? new GraphQLNonNull(IdInputType) : IdInputType
+          fieldArgForUpdate.type = fieldArg.type
         } else if (typesDict.types[fieldEntry.type.name].inputType) {
           fieldArg.type = typesDict.types[fieldEntry.type.name].inputType
+        } else if (typesDictForUpdate.types[fieldEntry.type.name].inputType) {
+          fieldArgForUpdate.type = typesDictForUpdate.types[fieldEntry.type.name].inputType
         } else {
           return null
         }
@@ -136,30 +146,16 @@ const buildInputType = function (model, gqltype) {
         console.warn('Configuration issue: Field ' + fieldEntryName + ' does not define extensions.relation')
       }
     } else if (fieldEntry.type instanceof GraphQLList) {
-      const ofType = fieldEntry.type.ofType
-
-      if (typesDict.types[ofType.name].inputType) {
-        if (!fieldEntry.extensions || !fieldEntry.extensions.relation || !fieldEntry.extensions.relation.embedded) {
-          const oneToMany = new GraphQLInputObjectType({
-            name: 'OneToMany' + fieldEntryName,
-            fields: () => ({
-              added: { type: new GraphQLList(typesDict.types[ofType.name].inputType) },
-              updated: { type: new GraphQLList(typesDict.types[ofType.name].inputType) },
-              deleted: { type: new GraphQLList(typesDict.types[ofType.name].inputType) }
-            })
-          })
-
-          fieldArg.type = oneToMany
-        } else if (fieldEntry.extensions && fieldEntry.extensions.relation && fieldEntry.extensions.relation.embedded) {
-          fieldArg.type = new GraphQLList(typesDict.types[ofType.name].inputType)
-        }
-      } else {
-        return null
-      }
+      fieldArg.type = graphQLListInputType(typesDict, fieldEntry, fieldEntryName)
+      fieldArgForUpdate.type = graphQLListInputType(typesDictForUpdate, fieldEntry, fieldEntryName)
     }
 
     if (fieldArg.type) {
       fieldsArgs[fieldEntryName] = fieldArg
+    }
+
+    if (fieldArgForUpdate.type) {
+      fieldsArgForUpdate[fieldEntryName] = fieldArgForUpdate
     }
   }
 
@@ -168,7 +164,34 @@ const buildInputType = function (model, gqltype) {
     fields: fieldsArgs
   }
 
-  return new GraphQLInputObjectType(inputTypeBody)
+  const inputTypeBodyForUpdate = {
+    name: gqltype.name + 'InputForUpdate',
+    fields: fieldsArgForUpdate
+  }
+
+  return { inputTypeBody: new GraphQLInputObjectType(inputTypeBody), inputTypeBodyForUpdate: new GraphQLInputObjectType(inputTypeBodyForUpdate) }
+}
+
+const graphQLListInputType = function (dict, fieldEntry, fieldEntryName) {
+  const ofType = fieldEntry.type.ofType
+  if (dict.types[ofType.name].inputType) {
+    if (!fieldEntry.extensions || !fieldEntry.extensions.relation || !fieldEntry.extensions.relation.embedded) {
+      const oneToMany = new GraphQLInputObjectType({
+        name: 'OneToMany' + fieldEntryName,
+        fields: () => ({
+          added: { type: new GraphQLList(dict.types[ofType.name].inputType) },
+          updated: { type: new GraphQLList(dict.types[ofType.name].inputType) },
+          deleted: { type: new GraphQLList(dict.types[ofType.name].inputType) }
+        })
+      })
+
+      return oneToMany
+    } else if (fieldEntry.extensions && fieldEntry.extensions.relation && fieldEntry.extensions.relation.embedded) {
+      return new GraphQLList(dict.types[ofType.name].inputType)
+    }
+  } else {
+    return null
+  }
 }
 
 const buildPendingInputTypes = function (waitingInputType) {
@@ -178,10 +201,12 @@ const buildPendingInputTypes = function (waitingInputType) {
   for (const pendingInputTypeName in waitingInputType) {
     const model = waitingInputType[pendingInputTypeName].model
     const gqltype = waitingInputType[pendingInputTypeName].gqltype
-    const builtInputType = buildInputType(model, gqltype)
 
-    if (builtInputType) {
-      typesDict.types[gqltype.name].inputType = builtInputType
+    const { inputTypeBody, inputTypeBodyForUpdate } = buildInputType(model, gqltype)
+
+    if (inputTypeBody && inputTypeBodyForUpdate) {
+      typesDict.types[gqltype.name].inputType = inputTypeBody
+      typesDictForUpdate.types[gqltype.name].inputType = inputTypeBodyForUpdate
     } else {
       stillWaitingInputType[pendingInputTypeName] = waitingInputType[pendingInputTypeName]
       isThereAtLeastOneWaiting = true
@@ -240,12 +265,9 @@ const buildRootQuery = function (name) {
         const aggregateClauses = await buildQuery(args, type.gqltype)
         let result
         if (aggregateClauses.length === 0) {
-          console.log('No filters')
           result = type.model.find({})
         } else {
-          console.log('Filters')
           result = type.model.aggregate(aggregateClauses)
-          console.log(result)
         }
 
         if (args.pagination) {
@@ -368,7 +390,7 @@ const onUpdateSubject = async function (Model, gqltype, args, session, linkToPar
     iterateonCollectionFields(materializeModel, gqltype, objectId, session)
   }
 
-  const modifiedObject = materializedModel.modelArgs
+  let modifiedObject = materializedModel.modelArgs
   const currentObject = await Model.findById({ _id: objectId })
 
   const argTypes = gqltype.getFields()
@@ -382,6 +404,10 @@ const onUpdateSubject = async function (Model, gqltype, args, session, linkToPar
       } else {
         modifiedObject[fieldEntryName] = { ...oldObjectData, ...newObjectData }
       }
+    }
+
+    if (args[fieldEntryName] === null && !(argTypes[fieldEntryName].type instanceof GraphQLNonNull)) {
+      modifiedObject = { ...modifiedObject, $unset: { [fieldEntryName]: '' } }
     }
   }
 
@@ -468,13 +494,6 @@ const buildMutation = function (name) {
           return executeOperation(type.model, type.gqltype, args.input, operations.SAVE)
         }
       }
-      rootQueryArgs.fields['update' + type.simpleEntityEndpointName] = {
-        type: type.gqltype,
-        args: argsObject,
-        async resolve (parent, args) {
-          return executeOperation(type.model, type.gqltype, args.input, operations.UPDATE)
-        }
-      }
       rootQueryArgs.fields['delete' + type.simpleEntityEndpointName] = {
         type: type.gqltype,
         args: { id: { type: new GraphQLNonNull(GraphQLID) } },
@@ -485,11 +504,27 @@ const buildMutation = function (name) {
     }
   }
 
+  for (const entry in typesDictForUpdate.types) {
+    const type = typesDictForUpdate.types[entry]
+
+    if (type.endpoint) {
+      const argsObject = { input: { type: new GraphQLNonNull(type.inputType) } }
+      rootQueryArgs.fields['update' + type.simpleEntityEndpointName] = {
+        type: type.gqltype,
+        args: argsObject,
+        async resolve (parent, args) {
+          return executeOperation(type.model, type.gqltype, args.input, operations.UPDATE)
+        }
+      }
+    }
+  }
+
   return new GraphQLObjectType(rootQueryArgs)
 }
 
 const typesDict = { types: {} }
 const waitingInputType = {}
+const typesDictForUpdate = { types: {} }
 
 /* Creating a new GraphQL Schema, with options query which defines query
 we will allow users to use when they are making request. */
@@ -513,6 +548,8 @@ module.exports.connect = function (model, gqltype, simpleEntityEndpointName, lis
     listEntitiesEndpointName: listEntitiesEndpointName,
     endpoint: true
   }
+
+  typesDictForUpdate.types[gqltype.name] = { ...typesDict.types[gqltype.name] }
 }
 
 module.exports.addNoEndpointType = function (gqltype) {
@@ -524,6 +561,8 @@ module.exports.addNoEndpointType = function (gqltype) {
     gqltype: gqltype,
     endpoint: false
   }
+
+  typesDictForUpdate.types[gqltype.name] = { ...typesDict.types[gqltype.name] }
 }
 
 const buildQuery = async function (input, gqltype) {
@@ -558,8 +597,6 @@ const buildQuery = async function (input, gqltype) {
           }
         }
       }
-
-      console.log(JSON.stringify(result))
     }
   }
 
@@ -567,6 +604,7 @@ const buildQuery = async function (input, gqltype) {
     aggregateClauses.push(matchesClauses)
   }
 
+  console.log(JSON.stringify(aggregateClauses))
   return aggregateClauses
 }
 
@@ -627,7 +665,7 @@ const buildQueryTerms = async function (filterField, qlField, fieldName) {
         matchesClause[fieldName + '.' + term.path] = term.value
         matchesClauses[fieldName] = matchesClause
       } else {
-        const currentGQLPathFieldType = qlField.type
+        let currentGQLPathFieldType = qlField.type
         let aliasPath = fieldName
         let embeddedPath = ''
 
@@ -637,26 +675,32 @@ const buildQueryTerms = async function (filterField, qlField, fieldName) {
             const matchesClause = {}
             matchesClause[aliasPath + (embeddedPath !== '' ? '.' + embeddedPath + '.' : '.') + pathFieldName] = term.value
             matchesClauses[aliasPath + '_' + pathFieldName] = matchesClause
+            embeddedPath = ''
           } else if (pathField.type instanceof GraphQLObjectType || pathField.type instanceof GraphQLList) {
             let pathFieldType = pathField.type
             if (pathField.type instanceof GraphQLList) {
               pathFieldType = pathField.type.ofType
             }
+            currentGQLPathFieldType = pathFieldType
+
             if (pathField.extensions && pathField.extensions.relation && !pathField.extensions.relation.embedded) {
-              const currentPath = aliasPath
-              aliasPath += '_' + pathFieldName
+              const currentPath = aliasPath + (embeddedPath !== '' ? '.' + embeddedPath : '')
+              aliasPath += (embeddedPath !== '' ? '_' + embeddedPath + '_' : '_') + pathFieldName
+
+              embeddedPath = ''
+
               const pathModel = typesDict.types[pathFieldType.name].model
               const fieldPathCollectionName = pathModel.collection.collectionName
               const pathLocalFieldName = pathField.extensions.relation.connectionField
 
+              let lookup = {}
               if (!aggregateClauses[aliasPath]) {
-                let lookup = {}
-                if (qlField.type instanceof GraphQLList) {
+                if (pathField.type instanceof GraphQLList) {
                   lookup = {
                     $lookup: {
                       from: fieldPathCollectionName,
-                      foreignField: currentPath + '.' + pathLocalFieldName,
-                      localField: '_id',
+                      foreignField: pathLocalFieldName,
+                      localField: currentPath + '.' + '_id',
                       as: aliasPath
                     }
                   }
@@ -670,18 +714,27 @@ const buildQueryTerms = async function (filterField, qlField, fieldName) {
                     }
                   }
                 }
-
-                aggregateClauses[aliasPath] = {
-                  lookup: lookup,
-                  unwind: { $unwind: { path: '$' + aliasPath, preserveNullAndEmptyArrays: true } }
+              } else {
+                lookup = {
+                  $lookup: {
+                    from: fieldPathCollectionName,
+                    foreignField: '_id',
+                    localField: currentPath + '.' + pathLocalFieldName,
+                    as: aliasPath
+                  }
                 }
               }
-            } else {
-              if (embeddedPath === '') {
-                embeddedPath += pathFieldName
-              } else {
-                embeddedPath += '.' + pathFieldName
+
+              aggregateClauses[aliasPath] = {
+                lookup: lookup,
+                unwind: { $unwind: { path: '$' + aliasPath, preserveNullAndEmptyArrays: true } }
               }
+            }
+          } else {
+            if (embeddedPath === '') {
+              embeddedPath += pathFieldName
+            } else {
+              embeddedPath += '.' + pathFieldName
             }
           }
         })
