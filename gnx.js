@@ -617,10 +617,10 @@ const buildQueryTerms = async function (filterField, qlField, fieldName) {
     // TODO only equal for now
     matchesClause[fieldName] = filterField.value
     matchesClauses[fieldName] = matchesClause
-  } else if (qlField.type instanceof GraphQLObjectType || qlField.type instanceof GraphQLList) {
+  } else if (qlField.type instanceof GraphQLObjectType || qlField.type instanceof GraphQLList || isNonNullOfType(qlField.type, GraphQLObjectType)) {
     let fieldType = qlField.type
 
-    if (fieldType instanceof GraphQLList) {
+    if (fieldType instanceof GraphQLList || fieldType instanceof GraphQLNonNull) {
       fieldType = qlField.type.ofType
     }
 
@@ -671,14 +671,14 @@ const buildQueryTerms = async function (filterField, qlField, fieldName) {
 
         term.path.split('.').forEach((pathFieldName) => {
           const pathField = currentGQLPathFieldType.getFields()[pathFieldName]
-          if (pathField.type instanceof GraphQLScalarType) {
+          if (pathField.type instanceof GraphQLScalarType || isNonNullOfType(pathField.type, GraphQLScalarType)) {
             const matchesClause = {}
             matchesClause[aliasPath + (embeddedPath !== '' ? '.' + embeddedPath + '.' : '.') + pathFieldName] = term.value
             matchesClauses[aliasPath + '_' + pathFieldName] = matchesClause
             embeddedPath = ''
-          } else if (pathField.type instanceof GraphQLObjectType || pathField.type instanceof GraphQLList) {
+          } else if (pathField.type instanceof GraphQLObjectType || pathField.type instanceof GraphQLList || isNonNullOfType(pathField.type, GraphQLObjectType)) {
             let pathFieldType = pathField.type
-            if (pathField.type instanceof GraphQLList) {
+            if (pathField.type instanceof GraphQLList || pathField.type instanceof GraphQLNonNull) {
               pathFieldType = pathField.type.ofType
             }
             currentGQLPathFieldType = pathFieldType
