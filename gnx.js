@@ -529,6 +529,7 @@ const buildQuery = async function (input, gqltype) {
   if(addMatch)
     aggreagteClauses.push(matchesClauses)
 
+  console.log(JSON.stringify(aggreagteClauses))
   return aggreagteClauses;
 }
 
@@ -605,26 +606,32 @@ const buildQueryTerms = async function (filterField, qlField, fieldName) {
               let matchesClause = {}
               matchesClause[aliasPath + (embeddedPath!=""? "." + embeddedPath + "." : ".")  + pathFieldName] = term.value
               matchesClauses[aliasPath + "_" + pathFieldName] = matchesClause
+              embeddedPath = ""
             } else if (pathField.type instanceof GraphQLObjectType || pathField.type instanceof GraphQLList) {
               let pathFieldType = pathField.type
               if (pathField.type instanceof GraphQLList) {
                 pathFieldType = pathField.type.ofType
               }
+              currentGQLPathFieldType = pathFieldType
+
               if (pathField.extensions && pathField.extensions.relation && !pathField.extensions.relation.embedded) {
-                let currentPath = aliasPath
-                aliasPath += "_" + pathFieldName
+                let currentPath = aliasPath + (embeddedPath!=""? "." + embeddedPath: "")
+                aliasPath += (embeddedPath!=""? "_" + embeddedPath + "_" : "_") + pathFieldName
+
+                embeddedPath = ""
+
                 let pathModel = typesDict.types[pathFieldType.name].model
                 let fieldPathCollectionName = pathModel.collection.collectionName
                 let pathLocalFieldName = pathField.extensions.relation.connectionField
 
                 if (!aggregateClauses[aliasPath]) {
                   let lookup = {}
-                  if(qlField.type instanceof GraphQLList){
+                  if(pathField.type instanceof GraphQLList){
                     lookup = {
                       $lookup: {
                         from: fieldPathCollectionName,
-                        foreignField: currentPath + "." + pathLocalFieldName,
-                        localField: '_id',
+                        foreignField:  pathLocalFieldName,
+                        localField: currentPath + "." + '_id',
                         as: aliasPath
                       }
                     }
