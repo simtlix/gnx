@@ -135,9 +135,8 @@ const buildInputType = function (model, gqltype) {
         if (!fieldEntry.extensions.relation.embedded) {
           fieldArg.type = fieldEntry.type instanceof GraphQLNonNull ? new GraphQLNonNull(IdInputType) : IdInputType
           fieldArgForUpdate.type = fieldArg.type
-        } else if (typesDict.types[fieldEntry.type.name].inputType) {
+        } else if (typesDict.types[fieldEntry.type.name].inputType && typesDictForUpdate.types[fieldEntry.type.name].inputType) {
           fieldArg.type = typesDict.types[fieldEntry.type.name].inputType
-        } else if (typesDictForUpdate.types[fieldEntry.type.name].inputType) {
           fieldArgForUpdate.type = typesDictForUpdate.types[fieldEntry.type.name].inputType
         } else {
           return null
@@ -399,10 +398,12 @@ const onUpdateSubject = async function (Model, gqltype, args, session, linkToPar
     if (fieldEntry.extensions && fieldEntry.extensions.relation && fieldEntry.extensions.relation.embedded) {
       const oldObjectData = currentObject[fieldEntryName]
       const newObjectData = modifiedObject[fieldEntryName]
-      if (Array.isArray(oldObjectData) && Array.isArray(newObjectData)) {
-        modifiedObject[fieldEntryName] = newObjectData
-      } else {
-        modifiedObject[fieldEntryName] = { ...oldObjectData, ...newObjectData }
+      if (newObjectData) {
+        if (Array.isArray(oldObjectData) && Array.isArray(newObjectData)) {
+          modifiedObject[fieldEntryName] = newObjectData
+        } else {
+          modifiedObject[fieldEntryName] = { ...oldObjectData, ...newObjectData }
+        }
       }
     }
 
