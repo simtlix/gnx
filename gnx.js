@@ -107,7 +107,7 @@ const buildInputType = function (model, gqltype) {
       if (fieldEntry.extensions && fieldEntry.extensions.relation) {
         if (!fieldEntry.extensions.relation.embedded) {
           fieldArg.type = fieldEntry.type instanceof GraphQLNonNull ? new GraphQLNonNull(IdInputType) : IdInputType
-          fieldArgForUpdate.type = fieldEntry.type instanceof GraphQLNonNull ? new GraphQLNonNull(IdInputType) : IdInputType
+          fieldArgForUpdate.type = fieldArg.type
         } else if (typesDict.types[fieldEntry.type.name].inputType) {
           fieldArg.type = typesDict.types[fieldEntry.type.name].inputType
         } else if (typesDictForUpdate.types[fieldEntry.type.name].inputType) {
@@ -119,45 +119,8 @@ const buildInputType = function (model, gqltype) {
         console.warn('Configuration issue: Field ' + fieldEntryName + ' does not define extensions.relation')
       }
     } else if (fieldEntry.type instanceof GraphQLList) {
-      const ofType = fieldEntry.type.ofType
-
-      if (typesDict.types[ofType.name].inputType) {
-        if (!fieldEntry.extensions || !fieldEntry.extensions.relation || !fieldEntry.extensions.relation.embedded) {
-          const oneToMany = new GraphQLInputObjectType({
-            name: 'OneToMany' + fieldEntryName,
-            fields: () => ({
-              added: { type: new GraphQLList(typesDict.types[ofType.name].inputType) },
-              updated: { type: new GraphQLList(typesDict.types[ofType.name].inputType) },
-              deleted: { type: new GraphQLList(typesDict.types[ofType.name].inputType) }
-            })
-          })
-
-          fieldArg.type = oneToMany
-        } else if (fieldEntry.extensions && fieldEntry.extensions.relation && fieldEntry.extensions.relation.embedded) {
-          fieldArg.type = new GraphQLList(typesDict.types[ofType.name].inputType)
-        }
-      } else {
-        return null
-      }
-
-      if (typesDictForUpdate.types[ofType.name].inputType) {
-        if (!fieldEntry.extensions || !fieldEntry.extensions.relation || !fieldEntry.extensions.relation.embedded) {
-          const oneToMany = new GraphQLInputObjectType({
-            name: 'OneToMany' + fieldEntryName,
-            fields: () => ({
-              added: { type: new GraphQLList(typesDictForUpdate.types[ofType.name].inputType) },
-              updated: { type: new GraphQLList(typesDictForUpdate.types[ofType.name].inputType) },
-              deleted: { type: new GraphQLList(typesDictForUpdate.types[ofType.name].inputType) }
-            })
-          })
-
-          fieldArgForUpdate.type = oneToMany
-        } else if (fieldEntry.extensions && fieldEntry.extensions.relation && fieldEntry.extensions.relation.embedded) {
-          fieldArgForUpdate.type = new GraphQLList(typesDictForUpdate.types[ofType.name].inputType)
-        }
-      } else {
-        return null
-      }
+      fieldArg.type = graphQLListInputType(typesDict, fieldEntry, fieldEntryName)
+      fieldArgForUpdate.type = graphQLListInputType(typesDictForUpdate, fieldEntry, fieldEntryName)
     }
 
     if (fieldArg.type) {
@@ -182,6 +145,28 @@ const buildInputType = function (model, gqltype) {
   return { inputTypeBody: new GraphQLInputObjectType(inputTypeBody), inputTypeBodyForUpdate: new GraphQLInputObjectType(inputTypeBodyForUpdate) }
 }
 
+const graphQLListInputType = function (dict, fieldEntry, fieldEntryName) {
+  const ofType = fieldEntry.type.ofType
+  if (dict.types[ofType.name].inputType) {
+    if (!fieldEntry.extensions || !fieldEntry.extensions.relation || !fieldEntry.extensions.relation.embedded) {
+      const oneToMany = new GraphQLInputObjectType({
+        name: 'OneToMany' + fieldEntryName,
+        fields: () => ({
+          added: { type: new GraphQLList(dict.types[ofType.name].inputType) },
+          updated: { type: new GraphQLList(dict.types[ofType.name].inputType) },
+          deleted: { type: new GraphQLList(dict.types[ofType.name].inputType) }
+        })
+      })
+
+      return oneToMany
+    } else if (fieldEntry.extensions && fieldEntry.extensions.relation && fieldEntry.extensions.relation.embedded) {
+      return new GraphQLList(dict.types[ofType.name].inputType)
+    }
+  } else {
+    return null
+  }
+}
+
 const buildPendingInputTypes = function (waitingInputType) {
   const stillWaitingInputType = {}
   let isThereAtLeastOneWaiting = false
@@ -189,12 +174,12 @@ const buildPendingInputTypes = function (waitingInputType) {
   for (const pendingInputTypeName in waitingInputType) {
     const model = waitingInputType[pendingInputTypeName].model
     const gqltype = waitingInputType[pendingInputTypeName].gqltype
-    const builtInputType = buildInputType(model, gqltype).inputTypeBody
-    const builtInputTypeForUpdate = buildInputType(model, gqltype).inputTypeBodyForUpdate
 
-    if (builtInputType && builtInputTypeForUpdate) {
-      typesDict.types[gqltype.name].inputType = builtInputType
-      typesDictForUpdate.types[gqltype.name].inputType = builtInputTypeForUpdate
+    const { inputTypeBody, inputTypeBodyForUpdate } = buildInputType(model, gqltype)
+
+    if (inputTypeBody && inputTypeBodyForUpdate) {
+      typesDict.types[gqltype.name].inputType = inputTypeBody
+      typesDictForUpdate.types[gqltype.name].inputType = inputTypeBodyForUpdate
     } else {
       stillWaitingInputType[pendingInputTypeName] = waitingInputType[pendingInputTypeName]
       isThereAtLeastOneWaiting = true
@@ -492,13 +477,6 @@ const buildMutation = function (name) {
           return executeOperation(type.model, type.gqltype, args.input, operations.UPDATE)
         }
       }
-      rootQueryArgs.fields['delete' + type.simpleEntityEndpointName] = {
-        type: type.gqltype,
-        args: { id: { type: new GraphQLNonNull(GraphQLID) } },
-        async resolve (parent, args) {
-          return executeOperation(type.model, type.gqltype, args.id, operations.DELETE)
-        }
-      }
     }
   }
 
@@ -532,7 +510,7 @@ module.exports.connect = function (model, gqltype, simpleEntityEndpointName, lis
     endpoint: true
   }
 
-  typesDictForUpdate.types[gqltype.name] = typesDict.types[gqltype.name]
+  typesDictForUpdate.types[gqltype.name] = { ...typesDict.types[gqltype.name] }
 }
 
 module.exports.addNoEndpointType = function (gqltype) {
@@ -545,7 +523,7 @@ module.exports.addNoEndpointType = function (gqltype) {
     endpoint: false
   }
 
-  typesDictForUpdate.types[gqltype.name] = typesDict.types[gqltype.name]
+  typesDictForUpdate.types[gqltype.name] = { ...typesDict.types[gqltype.name] }
 }
 
 const buildQuery = async function (input, gqltype) {
