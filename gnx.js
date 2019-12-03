@@ -612,7 +612,7 @@ const buildQueryTerms = async function (filterField, qlField, fieldName) {
   const aggregateClauses = {}
   const matchesClauses = {}
 
-  if (qlField.type instanceof GraphQLScalarType) {
+  if (qlField.type instanceof GraphQLScalarType || isNonNullOfType(qlField.type, GraphQLScalarType)) {
     const matchesClause = {}
     // TODO only equal for now
     matchesClause[fieldName] = filterField.value
