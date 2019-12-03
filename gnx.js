@@ -351,7 +351,7 @@ const materializeModel = function (args, gqltype, linkToParent) {
 
 const executeOperation = async function (Model, gqltype, args, operation) {
   const session = await mongoose.startSession()
-  session.startTransaction()
+  await session.startTransaction()
   try {
     let newObject = null
     switch (operation) {
@@ -423,7 +423,7 @@ const onSaveObject = async function (Model, gqltype, args, session, linkToParent
   newObject.$session(session)
 
   if (materializedModel.collectionFields) {
-    iterateonCollectionFields(materializeModel, gqltype, newObject._id, session)
+    iterateonCollectionFields(materializedModel, gqltype, newObject._id, session)
   }
 
   return newObject.save()
