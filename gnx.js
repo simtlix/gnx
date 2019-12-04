@@ -173,7 +173,8 @@ const buildInputType = function (model, gqltype) {
 
 const graphQLListInputType = function (dict, fieldEntry, fieldEntryName, inputNamePrefix) {
   const ofType = fieldEntry.type.ofType
-  if (dict.types[ofType.name].inputType) {
+
+  if (ofType instanceof GraphQLObjectType && dict.types[ofType.name].inputType) {
     if (!fieldEntry.extensions || !fieldEntry.extensions.relation || !fieldEntry.extensions.relation.embedded) {
       const oneToMany = new GraphQLInputObjectType({
         name: 'OneToMany' + inputNamePrefix + fieldEntryName,
@@ -188,6 +189,8 @@ const graphQLListInputType = function (dict, fieldEntry, fieldEntryName, inputNa
     } else if (fieldEntry.extensions && fieldEntry.extensions.relation && fieldEntry.extensions.relation.embedded) {
       return new GraphQLList(dict.types[ofType.name].inputType)
     }
+  } else if (ofType instanceof GraphQLScalarType) {
+    return new GraphQLList(ofType)
   } else {
     return null
   }
@@ -307,8 +310,7 @@ const materializeModel = function (args, gqltype, linkToParent) {
       }
     } else if (fieldEntry.type instanceof GraphQLList) {
       const ofType = fieldEntry.type.ofType
-
-      if (fieldEntry.extensions && fieldEntry.extensions.relation) {
+      if (ofType instanceof GraphQLObjectType && fieldEntry.extensions && fieldEntry.extensions.relation) {
         if (!fieldEntry.extensions.relation.embedded) {
           collectionFields[fieldEntryName] = args[fieldEntryName]
         } else if (fieldEntry.extensions.relation.embedded) {
@@ -323,6 +325,8 @@ const materializeModel = function (args, gqltype, linkToParent) {
 
           modelArgs[fieldEntryName] = collectionEntries
         }
+      } else if (ofType instanceof GraphQLScalarType) {
+        modelArgs[fieldEntryName] = args[fieldEntryName]
       }
     }
   }
