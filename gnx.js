@@ -701,61 +701,55 @@ const buildQueryTerms = async function (filterField, qlField, fieldName) {
               pathFieldType = pathField.type.ofType
             }
             currentGQLPathFieldType = pathFieldType
-
             if (pathField.extensions && pathField.extensions.relation && !pathField.extensions.relation.embedded) {
-              const currentPath = aliasPath + (embeddedPath !== '' ? '.' + embeddedPath : '')
-              aliasPath += (embeddedPath !== '' ? '_' + embeddedPath + '_' : '_') + pathFieldName
+              let currentPath = aliasPath + (embeddedPath!=""? "." + embeddedPath: "")
+              aliasPath += (embeddedPath!=""? "_" + embeddedPath + "_" : "_") + pathFieldName
 
-              embeddedPath = ''
+              embeddedPath = ""
 
-              const pathModel = typesDict.types[pathFieldType.name].model
-              const fieldPathCollectionName = pathModel.collection.collectionName
-              const pathLocalFieldName = pathField.extensions.relation.connectionField
+              let pathModel = typesDict.types[pathFieldType.name].model
+              let fieldPathCollectionName = pathModel.collection.collectionName
+              let pathLocalFieldName = pathField.extensions.relation.connectionField
 
-              let lookup = {}
               if (!aggregateClauses[aliasPath]) {
-                if (pathField.type instanceof GraphQLList) {
+                let lookup = {}
+                if(pathField.type instanceof GraphQLList){
                   lookup = {
                     $lookup: {
                       from: fieldPathCollectionName,
-                      foreignField: pathLocalFieldName,
-                      localField: currentPath + '.' + '_id',
+                      foreignField:  pathLocalFieldName,
+                      localField: currentPath + "." + '_id',
                       as: aliasPath
                     }
                   }
-                } else {
+                }else{
                   lookup = {
                     $lookup: {
                       from: fieldPathCollectionName,
                       foreignField: '_id',
-                      localField: currentPath + '.' + pathLocalFieldName,
+                      localField: currentPath + "." + pathLocalFieldName,
                       as: aliasPath
                     }
                   }
                 }
-              } else {
-                lookup = {
-                  $lookup: {
-                    from: fieldPathCollectionName,
-                    foreignField: '_id',
-                    localField: currentPath + '.' + pathLocalFieldName,
-                    as: aliasPath
-                  }
+
+                aggregateClauses[aliasPath] = {
+                  'lookup': lookup,
+                  'unwind': { $unwind: { path: "$" + aliasPath, preserveNullAndEmptyArrays: true } }
                 }
+
               }
 
-              aggregateClauses[aliasPath] = {
-                lookup: lookup,
-                unwind: { $unwind: { path: '$' + aliasPath, preserveNullAndEmptyArrays: true } }
+            } else {
+              if (embeddedPath == "") {
+                embeddedPath += pathFieldName
+              }
+              else {
+                embeddedPath += "." + pathFieldName
               }
             }
-          } else {
-            if (embeddedPath === '') {
-              embeddedPath += pathFieldName
-            } else {
-              embeddedPath += '.' + pathFieldName
-            }
-          }
+             
+          } 
         })
       }
     })
