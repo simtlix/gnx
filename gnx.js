@@ -644,11 +644,11 @@ const buildQueryTerms = async function (filterField, qlField, fieldName) {
     }
 
     filterField.terms.forEach(term => {
-      const model = typesDict.types[fieldType.name].model
-      const collectionName = model.collection.collectionName
-      const localFieldName = qlField.extensions.relation.connectionField
 
       if (qlField.extensions && qlField.extensions.relation && !qlField.extensions.relation.embedded) {
+        const model = typesDict.types[fieldType.name].model
+        const collectionName = model.collection.collectionName
+        const localFieldName = qlField.extensions.relation.connectionField
         if (!aggregateClauses[fieldName]) {
           let lookup = {}
 
@@ -685,6 +685,9 @@ const buildQueryTerms = async function (filterField, qlField, fieldName) {
         matchesClauses[fieldName] = matchesClause
       } else {
         let currentGQLPathFieldType = qlField.type
+        if(currentGQLPathFieldType instanceof GraphQLList){
+          currentGQLPathFieldType = currentGQLPathFieldType.ofType
+        }
         let aliasPath = fieldName
         let embeddedPath = ''
 
