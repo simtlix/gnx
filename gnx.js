@@ -38,6 +38,20 @@ const QLValue = new GraphQLScalarType({
       return ast.value === 'true' || ast.value === true
     } else if (ast.kind === Kind.STRING) {
       return ast.value
+    }else if (ast.kind === Kind.LIST){
+      let values = []
+      ast.values.forEach(value =>{
+        if (value.kind === Kind.INT) {
+          values.push(parseInt(value.value, 10))
+        } else if (value.kind === Kind.FLOAT) {
+          values.push(parseFloat(value.value))
+        } else if (value.kind === Kind.BOOLEAN) {
+          values.push(value.value === 'true' || value.value === true)
+        } else if (value.kind === Kind.STRING) {
+          values.push(value.value)
+        }
+      })
+      return values
     }
     return null
   }
@@ -656,7 +670,7 @@ const buildQuery = async function (input, gqltype) {
 const buildMatchesClause = function(fieldname, operator, value){
   let matches = {}
   
-  if(operator == QLOperator.getValue("EQ").value){
+  if(operator == QLOperator.getValue("EQ").value || !operator){
     matches[fieldname] = value
   }else if(operator == QLOperator.getValue("LT").value){
     matches[fieldname] = {$lt: value}
