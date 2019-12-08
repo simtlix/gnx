@@ -20,7 +20,7 @@ the data to retrieve or mutate the data */
 const QLFilter = new GraphQLInputObjectType({
   name: 'QLFilter',
   fields: () => ({
-    operator: { type: GraphQLString },
+    operator: { type: QLOperator },
     value: { type: QLValue }
   })
 })
@@ -50,7 +50,7 @@ function parseQLValue (value) {
 const QLTypeFilter = new GraphQLInputObjectType({
   name: 'QLTypeFilter',
   fields: () => ({
-    operator: { type: GraphQLString },
+    operator: { type: QLOperator },
     value: { type: QLValue },
     path: { type: GraphQLString }
   })
@@ -102,6 +102,33 @@ const QLSortOrder = new GraphQLEnumType({
     ASC: {
       value: 1
     }
+  }
+})
+
+const QLOperator = new GraphQLEnumType({
+  name: 'QLOperator',
+  values: {
+    EQ: {
+      value: 0
+    },
+    LT: {
+      value: 1
+    },
+    GT: {
+      value: 2
+    },
+    LTE: {
+      value: 3
+    },
+    GTE: {
+      value: 4
+    },
+    BTW: {
+      value: 5
+    },
+    NE: {
+      value: 6
+    },
   }
 })
 
@@ -626,16 +653,35 @@ const buildQuery = async function (input, gqltype) {
   console.log(JSON.stringify(aggregateClauses))
   return aggregateClauses
 }
+const buildMatchesClause = function(fieldname, operator, value){
+  let matches = {}
+  
+  if(operator == QLOperator.getValue("EQ").value){
+    matches[fieldname] = value
+  }else if(operator == QLOperator.getValue("LT").value){
+    matches[fieldname] = {$lt: value}
+  }else if(operator == QLOperator.getValue("GT").value){
+    matches[fieldname] = {$gt: value}
+  }else if(operator == QLOperator.getValue("LTE").value){
+    matches[fieldname] = {$lte: value}
+  }else if(operator == QLOperator.getValue("GTE").value){
+    matches[fieldname] = {$gte: value}
+  }else if(operator == QLOperator.getValue("NE").value){
+    matches[fieldname] = {$ne: value}
+  }else if(operator == QLOperator.getValue("BTW").value){
+    matches[fieldname] = {$gte: value[0], $lte:value[1]}
+  }
+
+  return matches
+}
 
 const buildQueryTerms = async function (filterField, qlField, fieldName) {
   const aggregateClauses = {}
   const matchesClauses = {}
 
   if (qlField.type instanceof GraphQLScalarType || isNonNullOfType(qlField.type, GraphQLScalarType)) {
-    const matchesClause = {}
-    // TODO only equal for now
-    matchesClause[fieldName] = filterField.value
-    matchesClauses[fieldName] = matchesClause
+    
+    matchesClauses[fieldName] = buildMatchesClause(fieldName,filterField.operator,filterField.value)
   } else if (qlField.type instanceof GraphQLObjectType || qlField.type instanceof GraphQLList || isNonNullOfType(qlField.type, GraphQLObjectType)) {
     let fieldType = qlField.type
 
@@ -680,9 +726,9 @@ const buildQueryTerms = async function (filterField, qlField, fieldName) {
       }
 
       if (term.path.indexOf('.') < 0) {
-        const matchesClause = {}
-        matchesClause[fieldName + '.' + term.path] = term.value
-        matchesClauses[fieldName] = matchesClause
+        
+        matchesClauses[fieldName] = buildMatchesClause(fieldName + '.' + term.path, term.operator, term.value)
+
       } else {
         let currentGQLPathFieldType = qlField.type
         if(currentGQLPathFieldType instanceof GraphQLList){
@@ -694,9 +740,7 @@ const buildQueryTerms = async function (filterField, qlField, fieldName) {
         term.path.split('.').forEach((pathFieldName) => {
           const pathField = currentGQLPathFieldType.getFields()[pathFieldName]
           if (pathField.type instanceof GraphQLScalarType || isNonNullOfType(pathField.type, GraphQLScalarType)) {
-            const matchesClause = {}
-            matchesClause[aliasPath + (embeddedPath !== '' ? '.' + embeddedPath + '.' : '.') + pathFieldName] = term.value
-            matchesClauses[aliasPath + '_' + pathFieldName] = matchesClause
+            matchesClauses[aliasPath + '_' + pathFieldName] = buildMatchesClause(aliasPath + (embeddedPath !== '' ? '.' + embeddedPath + '.' : '.') + pathFieldName, term.operator,term.value)
             embeddedPath = ''
           } else if (pathField.type instanceof GraphQLObjectType || pathField.type instanceof GraphQLList || isNonNullOfType(pathField.type, GraphQLObjectType)) {
             let pathFieldType = pathField.type
