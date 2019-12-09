@@ -221,9 +221,9 @@ const graphQLListInputType = function (dict, fieldEntry, fieldEntryName, inputNa
       const oneToMany = new GraphQLInputObjectType({
         name: 'OneToMany' + inputNamePrefix + fieldEntryName,
         fields: () => ({
-          added: { type: new GraphQLList(dict.types[ofType.name].inputType) },
-          updated: { type: new GraphQLList(dict.types[ofType.name].inputType) },
-          deleted: { type: new GraphQLList(dict.types[ofType.name].inputType) }
+          added: { type: new GraphQLList(typesDict.types[ofType.name].inputType) },
+          updated: { type: new GraphQLList(typesDictForUpdate.types[ofType.name].inputType) },
+          deleted: { type: new GraphQLList(typesDict.types[ofType.name].inputType) }
         })
       })
 
@@ -417,7 +417,7 @@ const onUpdateSubject = async function (Model, gqltype, args, session, linkToPar
   const objectId = args.id
 
   if (materializedModel.collectionFields) {
-    iterateonCollectionFields(materializeModel, gqltype, objectId, session)
+    iterateonCollectionFields(materializedModel, gqltype, objectId, session)
   }
 
   let modifiedObject = materializedModel.modelArgs
@@ -470,7 +470,7 @@ const iterateonCollectionFields = function (materializedModel, gqltype, objectId
       executeItemFunction(gqltype, collectionField, objectId, session, materializedModel.collectionFields[collectionField].updated, operations.UPDATE)
     }
     if (materializedModel.collectionFields[collectionField].deleted) {
-      executeItemFunction(gqltype, collectionField, objectId, session, materializedModel.collectionFields[collectionField].updated, operations.DELETE)
+      executeItemFunction(gqltype, collectionField, objectId, session, materializedModel.collectionFields[collectionField].deleted, operations.DELETE)
     }
   }
 }
