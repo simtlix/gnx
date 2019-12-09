@@ -176,7 +176,7 @@ const buildInputType = function (model, gqltype) {
         const fieldEntryName = fieldEntry.type instanceof GraphQLNonNull ? fieldEntry.type.ofType.name : fieldEntry.type.name
         if (!fieldEntry.extensions.relation.embedded) {
           fieldArg.type = fieldEntry.type instanceof GraphQLNonNull ? new GraphQLNonNull(IdInputType) : IdInputType
-          fieldArgForUpdate.type = fieldArg.type
+          fieldArgForUpdate.type = IdInputType
         } else if (typesDict.types[fieldEntryName].inputType && typesDictForUpdate.types[fieldEntryName].inputType) {
           fieldArg.type = typesDict.types[fieldEntryName].inputType
           fieldArgForUpdate.type = typesDictForUpdate.types[fieldEntryName].inputType
