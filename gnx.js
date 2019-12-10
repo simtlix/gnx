@@ -345,7 +345,8 @@ const materializeModel = function (args, gqltype, linkToParent) {
         if (!fieldEntry.extensions.relation.embedded) {
           modelArgs[fieldEntry.extensions.relation.connectionField] = new mongoose.Types.ObjectId(args[fieldEntryName].id)
         } else {
-          modelArgs[fieldEntryName] = materializeModel(args[fieldEntryName], fieldEntry.type).modelArgs
+          const fieldType = fieldEntry.type instanceof GraphQLNonNull ? fieldEntry.type.ofType : fieldEntry.type
+          modelArgs[fieldEntryName] = materializeModel(args[fieldEntryName], fieldType).modelArgs
         }
       } else {
         console.warn('Configuration issue: Field ' + fieldEntryName + ' does not define extensions.relation')
