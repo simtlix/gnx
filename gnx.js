@@ -142,6 +142,12 @@ const QLOperator = new GraphQLEnumType({
     },
     NE: {
       value: 6
+    },
+    IN: {
+      value: 7
+    },
+    NIN: {
+      value: 8
     }
   }
 })
@@ -380,20 +386,20 @@ const materializeModel = function (args, gqltype, linkToParent) {
   return { modelArgs: modelArgs, collectionFields: collectionFields }
 }
 
-const executeOperation = async function (Model, gqltype, args, operation) {
+const executeOperation = async function (Model, gqltype, controller,  args, operation) {
   const session = await mongoose.startSession()
   await session.startTransaction()
   try {
     let newObject = null
     switch (operation) {
       case operations.SAVE:
-        newObject = await onSaveObject(Model, gqltype, args, session)
+        newObject = await onSaveObject(Model, gqltype, controller, args, session)
         break
       case operations.UPDATE:
-        newObject = await onUpdateSubject(Model, gqltype, args, session)
+        newObject = await onUpdateSubject(Model, gqltype, controller, args, session)
         break
       case operations.DELETE:
-        newObject = await onDeleteObject(Model, gqltype, args, session)
+        newObject = await onDeleteObject(Model, gqltype, controller, args, session)
         break
     }
     console.log('before transaction')
@@ -407,13 +413,18 @@ const executeOperation = async function (Model, gqltype, args, operation) {
   }
 }
 
-const onDeleteObject = async function (Model, gqltype, args, session, linkToParent) {
+const onDeleteObject = async function (Model, gqltype, controller, args, session, linkToParent) {
   const result = materializeModel(args, gqltype, linkToParent)
   const deletedObject = new Model(result.modelArgs)
+
+  if(controller && controller.onDelete){
+    controller.onDelete(deletedObject)
+  }
+
   return Model.findByIdAndDelete(args, deletedObject.modelArgs).session(session)
 }
 
-const onUpdateSubject = async function (Model, gqltype, args, session, linkToParent) {
+const onUpdateSubject = async function (Model, gqltype, controller, args, session, linkToParent) {
   const materializedModel = materializeModel(args, gqltype, linkToParent)
   const objectId = args.id
 
@@ -444,16 +455,24 @@ const onUpdateSubject = async function (Model, gqltype, args, session, linkToPar
     }
   }
 
+  if(controller && controller.onUpdate){
+    controller.onUpdate(modifiedObject);
+  }
+
   return Model.findByIdAndUpdate(
     objectId, modifiedObject, { new: true }
   )
 }
 
-const onSaveObject = async function (Model, gqltype, args, session, linkToParent) {
+const onSaveObject = async function (Model, gqltype, controller, args, session, linkToParent) {
   const materializedModel = materializeModel(args, gqltype, linkToParent)
   const newObject = new Model(materializedModel.modelArgs)
   console.log(JSON.stringify(newObject))
   newObject.$session(session)
+
+  if(controller && controller.onSave){
+    controller.onSave(newObject);
+  }
 
   if (materializedModel.collectionFields) {
     iterateonCollectionFields(materializedModel, gqltype, newObject._id, session)
@@ -486,14 +505,14 @@ const executeItemFunction = function (gqltype, collectionField, objectId, sessio
   switch (operationType) {
     case operations.SAVE:
       operationFunction = collectionItem => {
-        onSaveObject(typesDict.types[collectionGQLType.name].model, collectionGQLType, collectionItem, session, (item) => {
+        onSaveObject(typesDict.types[collectionGQLType.name].model, collectionGQLType, typesDict.types[collectionGQLType.name].controller, collectionItem, session, (item) => {
           item[connectionField] = objectId
         })
       }
       break
     case operations.UPDATE:
       operationFunction = collectionItem => {
-        onUpdateSubject(typesDict.types[collectionGQLType.name].model, collectionGQLType, collectionItem, session, (item) => {
+        onUpdateSubject(typesDict.types[collectionGQLType.name].model, collectionGQLType, typesDict.types[collectionGQLType.name].controller, collectionItem, session, (item) => {
           item[connectionField] = objectId
         })
       }
@@ -524,14 +543,14 @@ const buildMutation = function (name) {
         type: type.gqltype,
         args: argsObject,
         async resolve (parent, args) {
-          return executeOperation(type.model, type.gqltype, args.input, operations.SAVE)
+          return executeOperation(type.model, type.gqltype, type.controller, args.input, operations.SAVE)
         }
       }
       rootQueryArgs.fields['delete' + type.simpleEntityEndpointName] = {
         type: type.gqltype,
         args: { id: { type: new GraphQLNonNull(GraphQLID) } },
         async resolve (parent, args) {
-          return executeOperation(type.model, type.gqltype, args.id, operations.DELETE)
+          return executeOperation(type.model, type.gqltype, type.controller, args.id, operations.DELETE)
         }
       }
     }
@@ -546,7 +565,7 @@ const buildMutation = function (name) {
         type: type.gqltype,
         args: argsObject,
         async resolve (parent, args) {
-          return executeOperation(type.model, type.gqltype, args.input, operations.UPDATE)
+          return executeOperation(type.model, type.gqltype, type.controller, args.input, operations.UPDATE)
         }
       }
     }
@@ -568,7 +587,7 @@ module.exports.createSchema = function () {
   })
 }
 
-module.exports.connect = function (model, gqltype, simpleEntityEndpointName, listEntitiesEndpointName) {
+module.exports.connect = function (model, gqltype, simpleEntityEndpointName, listEntitiesEndpointName, controller) {
   waitingInputType[gqltype.name] = {
     model: model,
     gqltype: gqltype
@@ -579,7 +598,8 @@ module.exports.connect = function (model, gqltype, simpleEntityEndpointName, lis
     gqltype: gqltype,
     simpleEntityEndpointName: simpleEntityEndpointName,
     listEntitiesEndpointName: listEntitiesEndpointName,
-    endpoint: true
+    endpoint: true,
+    controller: controller
   }
 
   typesDictForUpdate.types[gqltype.name] = { ...typesDict.types[gqltype.name] }
@@ -686,7 +706,12 @@ const buildMatchesClause = function (fieldname, operator, value) {
     matches[fieldname] = { $ne: value }
   } else if (operator === QLOperator.getValue('BTW').value) {
     matches[fieldname] = { $gte: value[0], $lte: value[1] }
+  }else if (operator === QLOperator.getValue('IN').value) {
+    matches[fieldname] = { $in: value[0] }
+  }else if (operator === QLOperator.getValue('NIN').value) {
+    matches[fieldname] = { $nin: value[0] }
   }
+
 
   return matches
 }
