@@ -708,9 +708,9 @@ const buildMatchesClause = function (fieldname, operator, value) {
   } else if (operator === QLOperator.getValue('BTW').value) {
     matches[fieldname] = { $gte: value[0], $lte: value[1] }
   }else if (operator === QLOperator.getValue('IN').value) {
-    matches[fieldname] = { $in: value[0] }
+    matches[fieldname] = { $in: value }
   }else if (operator === QLOperator.getValue('NIN').value) {
-    matches[fieldname] = { $nin: value[0] }
+    matches[fieldname] = { $nin: value }
   }
 
 
