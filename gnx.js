@@ -422,9 +422,10 @@ const onUpdateSubject = async function (Model, gqltype, args, session, linkToPar
   }
 
   let modifiedObject = materializedModel.modelArgs
-  const currentObject = await Model.findById({ _id: objectId })
+  const currentObject = await Model.findById({ _id: objectId }).lean()
 
   const argTypes = gqltype.getFields()
+
   for (const fieldEntryName in argTypes) {
     const fieldEntry = argTypes[fieldEntryName]
     if (fieldEntry.extensions && fieldEntry.extensions.relation && fieldEntry.extensions.relation.embedded) {
