@@ -148,6 +148,9 @@ const QLOperator = new GraphQLEnumType({
     },
     NIN: {
       value: 8
+    },
+    LIKE: {
+      value: 9
     }
   }
 })
@@ -711,6 +714,8 @@ const buildMatchesClause = function (fieldname, operator, value) {
     matches[fieldname] = { $in: value }
   }else if (operator === QLOperator.getValue('NIN').value) {
     matches[fieldname] = { $nin: value }
+  }else if (operator === QLOperator.getValue('LIKE').value) {
+    matches[fieldname] = { $regex: ".*"+value+".*" }
   }
 
 
