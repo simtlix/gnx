@@ -459,13 +459,20 @@ const onUpdateSubject = async function (Model, gqltype, controller, args, sessio
     }
   }
 
-  if(controller && controller.onUpdate){
-    controller.onUpdate(modifiedObject);
+  if(controller && controller.onUpdating){
+    controller.onUpdating(objectId, modifiedObject);
   }
 
-  return Model.findByIdAndUpdate(
+  let result = Model.findByIdAndUpdate(
     objectId, modifiedObject, { new: true }
   )
+
+  if(controller && controller.onUpdated){
+    controller.onUpdated(result);
+  }
+
+  return result;
+
 }
 
 const onSaveObject = async function (Model, gqltype, controller, args, session, linkToParent) {
@@ -474,15 +481,22 @@ const onSaveObject = async function (Model, gqltype, controller, args, session, 
   console.log(JSON.stringify(newObject))
   newObject.$session(session)
 
-  if(controller && controller.onSave){
-    controller.onSave(newObject);
+  if(controller && controller.onSaving){
+    controller.onSaving(newObject);
   }
 
   if (materializedModel.collectionFields) {
     iterateonCollectionFields(materializedModel, gqltype, newObject._id, session)
   }
 
-  return newObject.save()
+  let result = newObject.save()
+  if(controller && controller.onSaved)
+  {
+    controller.onSaved(result);
+  }
+
+  return result;
+
 }
 
 const iterateonCollectionFields = function (materializedModel, gqltype, objectId, session) {
