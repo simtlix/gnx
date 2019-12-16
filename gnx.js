@@ -330,6 +330,10 @@ const buildRootQuery = function (name) {
   return new GraphQLObjectType(rootQueryArgs)
 }
 
+const isEmpty = function (value) {
+  return !value && value !== false
+}
+
 const materializeModel = function (args, gqltype, linkToParent) {
   if (!args) {
     return null
@@ -343,7 +347,7 @@ const materializeModel = function (args, gqltype, linkToParent) {
   for (const fieldEntryName in argTypes) {
     const fieldEntry = argTypes[fieldEntryName]
 
-    if (!args[fieldEntryName]) {
+    if (isEmpty(args[fieldEntryName])) {
       continue
     }
 
