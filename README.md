@@ -1,3 +1,5 @@
+[![npm version](https://badge.fury.io/js/%40simtlix%2Fgnx.svg)](https://badge.fury.io/js/%40simtlix%2Fgnx)
+
 # How to
 ## Install
 ```bash
