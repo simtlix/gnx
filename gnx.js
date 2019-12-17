@@ -1,6 +1,5 @@
 const graphql = require('graphql')
 const mongoose = require('mongoose')
-const Schema = mongoose.Schema
 mongoose.set('useFindAndModify', false)
 
 const {
@@ -167,7 +166,7 @@ const isNonNullOfType = function (fieldEntryType, graphQLType) {
 const isNonNullOfTypeForNotScalar = function (fieldEntryType, graphQLType) {
   let isOfType = false
   if (fieldEntryType instanceof GraphQLNonNull) {
-    isOfType = fieldEntryType.ofType == graphQLType
+    isOfType = fieldEntryType.ofType === graphQLType
   }
   return isOfType
 }
@@ -402,7 +401,7 @@ const materializeModel = function (args, gqltype, linkToParent) {
   return { modelArgs: modelArgs, collectionFields: collectionFields }
 }
 
-const executeOperation = async function (Model, gqltype, controller,  args, operation) {
+const executeOperation = async function (Model, gqltype, controller, args, operation) {
   const session = await mongoose.startSession()
   await session.startTransaction()
   try {
@@ -433,7 +432,7 @@ const onDeleteObject = async function (Model, gqltype, controller, args, session
   const result = materializeModel(args, gqltype, linkToParent)
   const deletedObject = new Model(result.modelArgs)
 
-  if(controller && controller.onDelete){
+  if (controller && controller.onDelete) {
     controller.onDelete(deletedObject)
   }
 
@@ -472,20 +471,19 @@ const onUpdateSubject = async function (Model, gqltype, controller, args, sessio
     }
   }
 
-  if(controller && controller.onUpdating){
-    controller.onUpdating(objectId, modifiedObject);
+  if (controller && controller.onUpdating) {
+    controller.onUpdating(objectId, modifiedObject)
   }
 
-  let result = Model.findByIdAndUpdate(
+  const result = Model.findByIdAndUpdate(
     objectId, modifiedObject, { new: true }
   )
 
-  if(controller && controller.onUpdated){
-    controller.onUpdated(result);
+  if (controller && controller.onUpdated) {
+    controller.onUpdated(result)
   }
 
-  return result;
-
+  return result
 }
 
 const onSaveObject = async function (Model, gqltype, controller, args, session, linkToParent) {
@@ -494,22 +492,20 @@ const onSaveObject = async function (Model, gqltype, controller, args, session, 
   console.log(JSON.stringify(newObject))
   newObject.$session(session)
 
-  if(controller && controller.onSaving){
-    controller.onSaving(newObject);
+  if (controller && controller.onSaving) {
+    controller.onSaving(newObject)
   }
 
   if (materializedModel.collectionFields) {
     iterateonCollectionFields(materializedModel, gqltype, newObject._id, session)
   }
 
-  let result = newObject.save()
-  if(controller && controller.onSaved)
-  {
-    controller.onSaved(result);
+  const result = newObject.save()
+  if (controller && controller.onSaved) {
+    controller.onSaved(result)
   }
 
-  return result;
-
+  return result
 }
 
 const iterateonCollectionFields = function (materializedModel, gqltype, objectId, session) {
@@ -605,50 +601,48 @@ const buildMutation = function (name) {
   return new GraphQLObjectType(rootQueryArgs)
 }
 
-const generateSchemaDefinition = function(gqlType){
+const generateSchemaDefinition = function (gqlType) {
   const argTypes = gqlType.getFields()
 
-  let schemaArg = {}
+  const schemaArg = {}
 
   for (const fieldEntryName in argTypes) {
-      const fieldEntry = argTypes[fieldEntryName]
+    const fieldEntry = argTypes[fieldEntryName]
 
-    if(fieldEntry.type == GraphQLID || isNonNullOfTypeForNotScalar(fieldEntry.type, GraphQLID)){
+    if (fieldEntry.type === GraphQLID || isNonNullOfTypeForNotScalar(fieldEntry.type, GraphQLID)) {
       schemaArg[fieldEntryName] = mongoose.Schema.Types.ObjectId
-    }else if(fieldEntry.type == GraphQLString || isNonNullOfTypeForNotScalar(fieldEntry.type, GraphQLString)){
+    } else if (fieldEntry.type === GraphQLString || isNonNullOfTypeForNotScalar(fieldEntry.type, GraphQLString)) {
       schemaArg[fieldEntryName] = String
-    }else if(fieldEntry.type == GraphQLInt || isNonNullOfTypeForNotScalar(fieldEntry.type, GraphQLInt)){
+    } else if (fieldEntry.type === GraphQLInt || isNonNullOfTypeForNotScalar(fieldEntry.type, GraphQLInt)) {
       schemaArg[fieldEntryName] = Number
-    }else if(fieldEntry.type == GraphQLFloat || isNonNullOfTypeForNotScalar(fieldEntry.type, GraphQLFloat)){
+    } else if (fieldEntry.type === GraphQLFloat || isNonNullOfTypeForNotScalar(fieldEntry.type, GraphQLFloat)) {
       schemaArg[fieldEntryName] = Number
-    }else if(fieldEntry.type == GraphQLBoolean || isNonNullOfTypeForNotScalar(fieldEntry.type, GraphQLBoolean)){
+    } else if (fieldEntry.type === GraphQLBoolean || isNonNullOfTypeForNotScalar(fieldEntry.type, GraphQLBoolean)) {
       schemaArg[fieldEntryName] = Boolean
-    }else if(fieldEntry.type instanceof GraphQLObjectType || isNonNullOfType(fieldEntry.type, GraphQLObjectType)){
-      if(fieldEntry.extensions && fieldEntry.extensions.relation){
-        if(!fieldEntry.extensions.relation.embedded){
+    } else if (fieldEntry.type instanceof GraphQLObjectType || isNonNullOfType(fieldEntry.type, GraphQLObjectType)) {
+      if (fieldEntry.extensions && fieldEntry.extensions.relation) {
+        if (!fieldEntry.extensions.relation.embedded) {
           schemaArg[fieldEntry.extensions.relation.connectionField] = mongoose.Schema.Types.ObjectId
-        }else{
+        } else {
           let entryType = fieldEntry.type
           if (entryType instanceof GraphQLNonNull) {
             entryType = entryType.ofType
           }
-          if(entryType != gqlType){
+          if (entryType !== gqlType) {
             schemaArg[fieldEntryName] = generateSchemaDefinition(entryType)
-          }else{
-            throw new Error("A type cannot have a field of its same type and embedded")
+          } else {
+            throw new Error('A type cannot have a field of its same type and embedded')
           }
-            
         }
       }
-        
-    }else if(fieldEntry.type instanceof GraphQLList){
-      if(fieldEntry.extensions && fieldEntry.extensions.relation){
-        if(fieldEntry.extensions.relation.embedded){
-          let entryType = fieldEntry.type.ofType
-          if(entryType != gqlType){
+    } else if (fieldEntry.type instanceof GraphQLList) {
+      if (fieldEntry.extensions && fieldEntry.extensions.relation) {
+        if (fieldEntry.extensions.relation.embedded) {
+          const entryType = fieldEntry.type.ofType
+          if (entryType !== gqlType) {
             schemaArg[fieldEntryName] = [generateSchemaDefinition(entryType)]
-          }else{
-            throw new Error("A type cannot have a field of its same type and embedded")
+          } else {
+            throw new Error('A type cannot have a field of its same type and embedded')
           }
         }
       }
@@ -656,13 +650,11 @@ const generateSchemaDefinition = function(gqlType){
   }
 
   return schemaArg
-
 }
 
-const generateModel = function(gqlType, onModelCreated){
-
-  let model = mongoose.model(gqlType.name, generateSchemaDefinition(gqlType), gqlType.name)
-  if(onModelCreated){
+const generateModel = function (gqlType, onModelCreated) {
+  const model = mongoose.model(gqlType.name, generateSchemaDefinition(gqlType), gqlType.name)
+  if (onModelCreated) {
     onModelCreated(model)
   }
   model.createCollection()
@@ -682,7 +674,7 @@ module.exports.createSchema = function () {
   })
 }
 
-module.exports.getModel = function(gqltype){
+module.exports.getModel = function (gqltype) {
   return typesDict.types[gqltype.name].model
 }
 
@@ -693,7 +685,7 @@ module.exports.connect = function (model, gqltype, simpleEntityEndpointName, lis
   }
 
   typesDict.types[gqltype.name] = {
-    model: model?model:generateModel(gqltype,onModelCreated),
+    model: model || generateModel(gqltype, onModelCreated),
     gqltype: gqltype,
     simpleEntityEndpointName: simpleEntityEndpointName,
     listEntitiesEndpointName: listEntitiesEndpointName,
@@ -805,14 +797,13 @@ const buildMatchesClause = function (fieldname, operator, value) {
     matches[fieldname] = { $ne: value }
   } else if (operator === QLOperator.getValue('BTW').value) {
     matches[fieldname] = { $gte: value[0], $lte: value[1] }
-  }else if (operator === QLOperator.getValue('IN').value) {
+  } else if (operator === QLOperator.getValue('IN').value) {
     matches[fieldname] = { $in: value }
-  }else if (operator === QLOperator.getValue('NIN').value) {
+  } else if (operator === QLOperator.getValue('NIN').value) {
     matches[fieldname] = { $nin: value }
-  }else if (operator === QLOperator.getValue('LIKE').value) {
-    matches[fieldname] = { $regex: ".*"+value+".*" }
+  } else if (operator === QLOperator.getValue('LIKE').value) {
+    matches[fieldname] = { $regex: '.*' + value + '.*' }
   }
-
 
   return matches
 }
