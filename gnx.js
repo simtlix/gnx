@@ -1,11 +1,12 @@
 const graphql = require('graphql')
 const mongoose = require('mongoose')
+const Schema = mongoose.Schema
 mongoose.set('useFindAndModify', false)
 
 const {
   GraphQLObjectType, GraphQLString, GraphQLID, GraphQLSchema, GraphQLList,
   GraphQLNonNull, GraphQLInputObjectType, GraphQLScalarType, Kind,
-  GraphQLInt, GraphQLEnumType
+  GraphQLInt, GraphQLEnumType, GraphQLBoolean, GraphQLFloat
 } = graphql
 
 const operations = {
@@ -159,6 +160,14 @@ const isNonNullOfType = function (fieldEntryType, graphQLType) {
   let isOfType = false
   if (fieldEntryType instanceof GraphQLNonNull) {
     isOfType = fieldEntryType.ofType instanceof graphQLType
+  }
+  return isOfType
+}
+
+const isNonNullOfTypeForNotScalar = function (fieldEntryType, graphQLType) {
+  let isOfType = false
+  if (fieldEntryType instanceof GraphQLNonNull) {
+    isOfType = fieldEntryType.ofType == graphQLType
   }
   return isOfType
 }
@@ -596,6 +605,70 @@ const buildMutation = function (name) {
   return new GraphQLObjectType(rootQueryArgs)
 }
 
+const generateSchemaDefinition = function(gqlType){
+  const argTypes = gqlType.getFields()
+
+  let schemaArg = {}
+
+  for (const fieldEntryName in argTypes) {
+      const fieldEntry = argTypes[fieldEntryName]
+
+    if(fieldEntry.type == GraphQLID || isNonNullOfTypeForNotScalar(fieldEntry.type, GraphQLID)){
+      schemaArg[fieldEntryName] = mongoose.Schema.Types.ObjectId
+    }else if(fieldEntry.type == GraphQLString || isNonNullOfTypeForNotScalar(fieldEntry.type, GraphQLString)){
+      schemaArg[fieldEntryName] = String
+    }else if(fieldEntry.type == GraphQLInt || isNonNullOfTypeForNotScalar(fieldEntry.type, GraphQLInt)){
+      schemaArg[fieldEntryName] = Number
+    }else if(fieldEntry.type == GraphQLFloat || isNonNullOfTypeForNotScalar(fieldEntry.type, GraphQLFloat)){
+      schemaArg[fieldEntryName] = Number
+    }else if(fieldEntry.type == GraphQLBoolean || isNonNullOfTypeForNotScalar(fieldEntry.type, GraphQLBoolean)){
+      schemaArg[fieldEntryName] = Boolean
+    }else if(fieldEntry.type instanceof GraphQLObjectType || isNonNullOfType(fieldEntry.type, GraphQLObjectType)){
+      if(fieldEntry.extensions && fieldEntry.extensions.relation){
+        if(!fieldEntry.extensions.relation.embedded){
+          schemaArg[fieldEntry.extensions.relation.connectionField] = mongoose.Schema.Types.ObjectId
+        }else{
+          let entryType = fieldEntry.type
+          if (entryType instanceof GraphQLNonNull) {
+            entryType = entryType.ofType
+          }
+          if(entryType != gqlType){
+            schemaArg[fieldEntryName] = generateSchemaDefinition(entryType)
+          }else{
+            throw new Error("A type cannot have a field of its same type and embedded")
+          }
+            
+        }
+      }
+        
+    }else if(fieldEntry.type instanceof GraphQLList){
+      if(fieldEntry.extensions && fieldEntry.extensions.relation){
+        if(fieldEntry.extensions.relation.embedded){
+          let entryType = fieldEntry.type.ofType
+          if(entryType != gqlType){
+            schemaArg[fieldEntryName] = [generateSchemaDefinition(entryType)]
+          }else{
+            throw new Error("A type cannot have a field of its same type and embedded")
+          }
+        }
+      }
+    }
+  }
+
+  return schemaArg
+
+}
+
+const generateModel = function(gqlType, onModelCreated){
+
+  let model = mongoose.model(gqlType.name, generateSchemaDefinition(gqlType), gqlType.name)
+  if(onModelCreated){
+    onModelCreated(model)
+  }
+  model.createCollection()
+  return model
+}
+
 const typesDict = { types: {} }
 const waitingInputType = {}
 const typesDictForUpdate = { types: {} }
@@ -609,14 +682,18 @@ module.exports.createSchema = function () {
   })
 }
 
-module.exports.connect = function (model, gqltype, simpleEntityEndpointName, listEntitiesEndpointName, controller) {
+module.exports.getModel = function(gqltype){
+  return typesDict.types[gqltype.name].model
+}
+
+module.exports.connect = function (model, gqltype, simpleEntityEndpointName, listEntitiesEndpointName, controller, onModelCreated) {
   waitingInputType[gqltype.name] = {
     model: model,
     gqltype: gqltype
   }
 
   typesDict.types[gqltype.name] = {
-    model: model,
+    model: model?model:generateModel(gqltype,onModelCreated),
     gqltype: gqltype,
     simpleEntityEndpointName: simpleEntityEndpointName,
     listEntitiesEndpointName: listEntitiesEndpointName,
