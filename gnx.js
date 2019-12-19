@@ -182,6 +182,10 @@ const buildInputType = function (model, gqltype) {
     const fieldArg = {}
     const fieldArgForUpdate = {}
 
+    if (fieldEntry.extensions && fieldEntry.extensions.readOnly) {
+      continue
+    }
+
     if (fieldEntry.type instanceof GraphQLScalarType || isNonNullOfType(fieldEntry.type, GraphQLScalarType)) {
       if(fieldEntryName != "id"){
         fieldArg.type = fieldEntry.type
