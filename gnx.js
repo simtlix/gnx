@@ -186,8 +186,10 @@ const buildInputType = function (model, gqltype) {
       continue
     }
 
-    if (fieldEntry.type instanceof GraphQLScalarType || isNonNullOfType(fieldEntry.type, GraphQLScalarType)) {
-      if(fieldEntryName != "id"){
+    if (fieldEntry.type instanceof GraphQLScalarType || fieldEntry.type instanceof GraphQLEnumType ||
+        isNonNullOfType(fieldEntry.type, GraphQLScalarType) || isNonNullOfType(fieldEntry.type, GraphQLEnumType)
+    ) {
+      if (fieldEntryName != 'id') {
         fieldArg.type = fieldEntry.type
       }
       fieldArgForUpdate.type = fieldEntry.type instanceof GraphQLNonNull ? fieldEntry.type.ofType : fieldEntry.type
@@ -254,7 +256,7 @@ const graphQLListInputType = function (dict, fieldEntry, fieldEntryName, inputNa
     } else if (fieldEntry.extensions && fieldEntry.extensions.relation && fieldEntry.extensions.relation.embedded) {
       return new GraphQLList(dict.types[ofType.name].inputType)
     }
-  } else if (ofType instanceof GraphQLScalarType) {
+  } else if (ofType instanceof GraphQLScalarType || ofType instanceof GraphQLEnumType) {
     return new GraphQLList(ofType)
   } else {
     return null
@@ -319,7 +321,8 @@ const buildRootQuery = function (name) {
       const fieldEntry = argTypes[fieldEntryName]
       argsObject[fieldEntryName] = {}
 
-      if (fieldEntry.type instanceof GraphQLScalarType || isNonNullOfType(fieldEntry.type, GraphQLScalarType)) {
+      if (fieldEntry.type instanceof GraphQLScalarType || isNonNullOfType(fieldEntry.type, GraphQLScalarType) ||
+          fieldEntry.type instanceof GraphQLEnumType || isNonNullOfType(fieldEntry.type, GraphQLEnumType)) {
         argsObject[fieldEntryName].type = QLFilter
       } else if (fieldEntry.type instanceof GraphQLObjectType || fieldEntry.type instanceof GraphQLList || isNonNullOfType(fieldEntry.type, GraphQLObjectType)) {
         argsObject[fieldEntryName].type = QLTypeFilterExpression
@@ -402,7 +405,7 @@ const materializeModel = function (args, gqltype, linkToParent) {
 
           modelArgs[fieldEntryName] = collectionEntries
         }
-      } else if (ofType instanceof GraphQLScalarType) {
+      } else if (ofType instanceof GraphQLScalarType || ofType instanceof GraphQLEnumType) {
         modelArgs[fieldEntryName] = args[fieldEntryName]
       }
     }
