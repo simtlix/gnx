@@ -449,7 +449,7 @@ const onDeleteObject = async function (Model, gqltype, controller, args, session
   const deletedObject = new Model(result.modelArgs)
 
   if (controller && controller.onDelete) {
-    controller.onDelete(deletedObject)
+    await controller.onDelete(deletedObject)
   }
 
   return Model.findByIdAndDelete(args, deletedObject.modelArgs).session(session)
