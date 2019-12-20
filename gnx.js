@@ -183,7 +183,7 @@ const buildInputType = function (model, gqltype) {
     const fieldArgForUpdate = {}
 
     if (fieldEntry.type instanceof GraphQLScalarType || isNonNullOfType(fieldEntry.type, GraphQLScalarType)) {
-      if(fieldEntryName != "id"){
+      if (fieldEntryName !== 'id') {
         fieldArg.type = fieldEntry.type
       }
       fieldArgForUpdate.type = fieldEntry.type instanceof GraphQLNonNull ? fieldEntry.type.ofType : fieldEntry.type
@@ -286,14 +286,12 @@ const buildRootQuery = function (name) {
   rootQueryArgs.name = name
   rootQueryArgs.fields = {}
 
-
-
   for (const entry in typesDict.types) {
     const type = typesDict.types[entry]
 
-      //Fixing resolve method in order to be compliant with Mongo _id field
-    if(type.gqltype.getFields()["id"] && !type.gqltype.getFields()["id"].resolve){
-      type.gqltype.getFields()["id"].resolve = function(parent) {return parent._id}
+    // Fixing resolve method in order to be compliant with Mongo _id field
+    if (type.gqltype.getFields().id && !type.gqltype.getFields().id.resolve) {
+      type.gqltype.getFields().id.resolve = function (parent) { return parent._id }
     }
 
     rootQueryArgs.fields[type.simpleEntityEndpointName] = {
@@ -727,8 +725,6 @@ const buildQuery = async function (input, gqltype) {
   let addPagination = false
   let sortClause = {}
   let addSort = false
-
-
 
   for (const key in input) {
     if (Object.prototype.hasOwnProperty.call(input, key) && key !== 'pagination' && key !== 'sort') {
