@@ -481,7 +481,7 @@ const onUpdateSubject = async function (Model, gqltype, controller, args, sessio
   }
 
   if (controller && controller.onUpdating) {
-    controller.onUpdating(objectId, modifiedObject)
+    await controller.onUpdating(objectId, modifiedObject)
   }
 
   const result = Model.findByIdAndUpdate(
