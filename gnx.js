@@ -488,7 +488,7 @@ const onUpdateSubject = async function (Model, gqltype, controller, args, sessio
   }
 
   if (controller && controller.onUpdating) {
-    controller.onUpdating(objectId, modifiedObject)
+    await controller.onUpdating(objectId, modifiedObject)
   }
 
   const result = Model.findByIdAndUpdate(
@@ -496,7 +496,7 @@ const onUpdateSubject = async function (Model, gqltype, controller, args, sessio
   )
 
   if (controller && controller.onUpdated) {
-    controller.onUpdated(result)
+    await controller.onUpdated(result)
   }
 
   return result
@@ -509,7 +509,7 @@ const onSaveObject = async function (Model, gqltype, controller, args, session, 
   newObject.$session(session)
 
   if (controller && controller.onSaving) {
-    controller.onSaving(newObject)
+    await controller.onSaving(newObject)
   }
 
   if (materializedModel.collectionFields) {
@@ -518,7 +518,7 @@ const onSaveObject = async function (Model, gqltype, controller, args, session, 
 
   const result = newObject.save()
   if (controller && controller.onSaved) {
-    controller.onSaved(result)
+    await controller.onSaved(result)
   }
 
   return result
