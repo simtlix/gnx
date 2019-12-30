@@ -487,10 +487,12 @@ const onUpdateSubject = async function (Model, gqltype, controller, args, sessio
     }
   }
 
+  checkIfObjectChanged(currentObject,modifiedObject);
+
   if (controller && controller.onUpdating) {
     await controller.onUpdating(objectId, modifiedObject)
   }
-
+  
   const result = Model.findByIdAndUpdate(
     objectId, modifiedObject, { new: true }
   )
@@ -500,6 +502,14 @@ const onUpdateSubject = async function (Model, gqltype, controller, args, sessio
   }
 
   return result
+}
+
+const checkIfObjectChanged = (currentObject, modifiedObject) => {
+  completeObject = { ...currentObject, ...modifiedObject}
+  delete  completeObject.id;
+  if (Object.entries(currentObject).toString() === Object.entries(completeObject).toString()){
+    throw Error('The object doesn\'t have changes')
+  }
 }
 
 const onSaveObject = async function (Model, gqltype, controller, args, session, linkToParent) {
