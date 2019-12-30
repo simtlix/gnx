@@ -189,7 +189,7 @@ const buildInputType = function (model, gqltype) {
     if (fieldEntry.type instanceof GraphQLScalarType || fieldEntry.type instanceof GraphQLEnumType ||
         isNonNullOfType(fieldEntry.type, GraphQLScalarType) || isNonNullOfType(fieldEntry.type, GraphQLEnumType)
     ) {
-      if (fieldEntryName != 'id') {
+      if (fieldEntryName !== 'id') {
         fieldArg.type = fieldEntry.type
       }
       fieldArgForUpdate.type = fieldEntry.type instanceof GraphQLNonNull ? fieldEntry.type.ofType : fieldEntry.type
@@ -292,14 +292,12 @@ const buildRootQuery = function (name) {
   rootQueryArgs.name = name
   rootQueryArgs.fields = {}
 
-
-
   for (const entry in typesDict.types) {
     const type = typesDict.types[entry]
 
-      //Fixing resolve method in order to be compliant with Mongo _id field
-    if(type.gqltype.getFields()["id"] && !type.gqltype.getFields()["id"].resolve){
-      type.gqltype.getFields()["id"].resolve = function(parent) {return parent._id}
+    // Fixing resolve method in order to be compliant with Mongo _id field
+    if (type.gqltype.getFields().id && !type.gqltype.getFields().id.resolve) {
+      type.gqltype.getFields().id.resolve = function (parent) { return parent._id }
     }
 
     rootQueryArgs.fields[type.simpleEntityEndpointName] = {
@@ -735,8 +733,6 @@ const buildQuery = async function (input, gqltype) {
   let sortClause = {}
   let addSort = false
 
-
-
   for (const key in input) {
     if (Object.prototype.hasOwnProperty.call(input, key) && key !== 'pagination' && key !== 'sort') {
       const filterField = input[key]
@@ -801,6 +797,7 @@ const buildMatchesClause = function (fieldname, operator, value) {
   const matches = {}
 
   if (operator === QLOperator.getValue('EQ').value || !operator) {
+    if (mongoose.Types.ObjectId.isValid(value)) value = new mongoose.Types.ObjectId(value)
     matches[fieldname] = value
   } else if (operator === QLOperator.getValue('LT').value) {
     matches[fieldname] = { $lt: value }
