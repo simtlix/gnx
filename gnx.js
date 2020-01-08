@@ -11,7 +11,8 @@ const {
 const operations = {
   SAVE: 'save',
   UPDATE: 'update',
-  DELETE: 'delete'
+  DELETE: 'delete',
+  STATE_CHANGED: 'state_changed'
 }
 
 /* Schema defines data on the Graph like object types(book type), relation between
@@ -186,6 +187,13 @@ const buildInputType = function (model, gqltype) {
       continue
     }
 
+    let hasStateMachine = typesDict.types[gqltype.name].stateMachine?true:false
+    let doesEstateFieldExistButIsManagedByStateMachine = fieldEntryName === "state" && hasStateMachine?true:false
+    if(doesEstateFieldExistButIsManagedByStateMachine){
+      // state field should not be controlled by the insert or update
+      continue
+    }
+
     if (fieldEntry.type instanceof GraphQLScalarType || fieldEntry.type instanceof GraphQLEnumType ||
         isNonNullOfType(fieldEntry.type, GraphQLScalarType) || isNonNullOfType(fieldEntry.type, GraphQLEnumType)
     ) {
@@ -292,9 +300,11 @@ const buildRootQuery = function (name) {
   rootQueryArgs.name = name
   rootQueryArgs.fields = {}
 
+
+
   for (const entry in typesDict.types) {
     const type = typesDict.types[entry]
-
+  
     // Fixing resolve method in order to be compliant with Mongo _id field
     if (type.gqltype.getFields().id && !type.gqltype.getFields().id.resolve) {
       type.gqltype.getFields().id.resolve = function (parent) { return parent._id }
@@ -373,7 +383,8 @@ const materializeModel = function (args, gqltype, linkToParent) {
       continue
     }
 
-    if (fieldEntry.type instanceof GraphQLScalarType || isNonNullOfType(fieldEntry.type, GraphQLScalarType)) {
+    if (fieldEntry.type instanceof GraphQLScalarType || fieldEntry.type instanceof GraphQLEnumType 
+      || isNonNullOfType(fieldEntry.type, GraphQLScalarType) || isNonNullOfType(fieldEntry.type, GraphQLEnumType)) {
       modelArgs[fieldEntryName] = args[fieldEntryName]
     } else if (fieldEntry.type instanceof GraphQLObjectType || isNonNullOfType(fieldEntry.type, GraphQLObjectType)) {
       if (fieldEntry.extensions && fieldEntry.extensions.relation) {
@@ -415,7 +426,7 @@ const materializeModel = function (args, gqltype, linkToParent) {
   return { modelArgs: modelArgs, collectionFields: collectionFields }
 }
 
-const executeOperation = async function (Model, gqltype, controller, args, operation) {
+const executeOperation = async function (Model, gqltype, controller, args, operation, actionField) {
   const session = await mongoose.startSession()
   await session.startTransaction()
   try {
@@ -430,6 +441,9 @@ const executeOperation = async function (Model, gqltype, controller, args, opera
       case operations.DELETE:
         newObject = await onDeleteObject(Model, gqltype, controller, args, session)
         break
+      case operations.STATE_CHANGED:
+          newObject = await onStateChanged(Model, gqltype, controller, args, session, actionField)
+          break
     }
     console.log('before transaction')
     await session.commitTransaction()
@@ -451,6 +465,24 @@ const onDeleteObject = async function (Model, gqltype, controller, args, session
   }
 
   return Model.findByIdAndDelete(args, deletedObject.modelArgs).session(session)
+}
+
+const onStateChanged = async function (Model, gqltype, controller, args, session, actionField){
+  if(actionField.action){
+    await actionField.action(args,session)
+  }
+
+  let storedModel = (await Model.find({id:args.id}))[0]
+
+  if(storedModel.state == actionField.from.name){
+    args.state = actionField.to.name
+    let result = await onUpdateSubject(Model, gqltype, controller, args, session)
+    result = result.toObject()
+    result.state = actionField.to.value
+    return result
+  } else{
+    throw new Error("Action is not allowed from state " + storedModel.state)
+  }
 }
 
 const onUpdateSubject = async function (Model, gqltype, controller, args, session, linkToParent) {
@@ -502,6 +534,12 @@ const onUpdateSubject = async function (Model, gqltype, controller, args, sessio
 
 const onSaveObject = async function (Model, gqltype, controller, args, session, linkToParent) {
   const materializedModel = materializeModel(args, gqltype, linkToParent)
+  
+  if(typesDict.types[gqltype.name].stateMachine)
+  {
+    materializedModel.state = typesDict.types[gqltype.name].stateMachine.initialState.name
+  }
+  
   const newObject = new Model(materializedModel.modelArgs)
   console.log(JSON.stringify(newObject))
   newObject.$session(session)
@@ -514,11 +552,16 @@ const onSaveObject = async function (Model, gqltype, controller, args, session, 
     iterateonCollectionFields(materializedModel, gqltype, newObject._id, session)
   }
 
-  const result = newObject.save()
+  let result = await newObject.save()
+  result = result.toObject()
   if (controller && controller.onSaved) {
     await controller.onSaved(result)
   }
-
+  
+  if(typesDict.types[gqltype.name].stateMachine)
+  {
+    result.state = typesDict.types[gqltype.name].stateMachine.initialState.value
+  }
   return result
 }
 
@@ -609,6 +652,20 @@ const buildMutation = function (name) {
           return executeOperation(type.model, type.gqltype, type.controller, args.input, operations.UPDATE)
         }
       }
+      if(type.stateMachine){
+        for (const actionName in type.stateMachine.actions) {
+          if (type.stateMachine.actions.hasOwnProperty(actionName)) {
+            const actionField = type.stateMachine.actions[actionName];
+            rootQueryArgs.fields[actionName + "_" + type.simpleEntityEndpointName] = {
+              type: type.gqltype,
+              args: argsObject,
+              async resolve (parent, args) {
+                return executeOperation(type.model, type.gqltype, type.controller, args.input, operations.STATE_CHANGED, actionField)
+              }
+            }
+          }
+        }
+      }
     }
   }
 
@@ -626,6 +683,8 @@ const generateSchemaDefinition = function (gqlType) {
     if (fieldEntry.type === GraphQLID || isNonNullOfTypeForNotScalar(fieldEntry.type, GraphQLID)) {
       schemaArg[fieldEntryName] = mongoose.Schema.Types.ObjectId
     } else if (fieldEntry.type === GraphQLString || isNonNullOfTypeForNotScalar(fieldEntry.type, GraphQLString)) {
+      schemaArg[fieldEntryName] = String
+    } else if (fieldEntry.type instanceof GraphQLEnumType || isNonNullOfType(fieldEntry.type, GraphQLEnumType)) {
       schemaArg[fieldEntryName] = String
     } else if (fieldEntry.type === GraphQLInt || isNonNullOfTypeForNotScalar(fieldEntry.type, GraphQLInt)) {
       schemaArg[fieldEntryName] = Number
@@ -692,7 +751,7 @@ module.exports.getModel = function (gqltype) {
   return typesDict.types[gqltype.name].model
 }
 
-module.exports.connect = function (model, gqltype, simpleEntityEndpointName, listEntitiesEndpointName, controller, onModelCreated) {
+module.exports.connect = function (model, gqltype, simpleEntityEndpointName, listEntitiesEndpointName, controller, onModelCreated, stateMachine) {
   waitingInputType[gqltype.name] = {
     model: model,
     gqltype: gqltype
@@ -703,7 +762,8 @@ module.exports.connect = function (model, gqltype, simpleEntityEndpointName, lis
     simpleEntityEndpointName: simpleEntityEndpointName,
     listEntitiesEndpointName: listEntitiesEndpointName,
     endpoint: true,
-    controller: controller
+    controller: controller,
+    stateMachine: stateMachine
   }
 
   typesDictForUpdate.types[gqltype.name] = { ...typesDict.types[gqltype.name] }
@@ -732,6 +792,8 @@ const buildQuery = async function (input, gqltype) {
   let addPagination = false
   let sortClause = {}
   let addSort = false
+
+
 
   for (const key in input) {
     if (Object.prototype.hasOwnProperty.call(input, key) && key !== 'pagination' && key !== 'sort') {
