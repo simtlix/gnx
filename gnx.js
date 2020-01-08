@@ -468,13 +468,15 @@ const onDeleteObject = async function (Model, gqltype, controller, args, session
 }
 
 const onStateChanged = async function (Model, gqltype, controller, args, session, actionField){
-  if(actionField.action){
-    await actionField.action(args,session)
-  }
+  
 
   let storedModel = (await Model.find({id:args.id}))[0]
 
   if(storedModel.state == actionField.from.name){
+    if(actionField.action){
+      await actionField.action(args,session)
+    }
+
     args.state = actionField.to.name
     let result = await onUpdateSubject(Model, gqltype, controller, args, session)
     result = result.toObject()
