@@ -15,6 +15,62 @@ const operations = {
   STATE_CHANGED: 'state_changed'
 }
 
+
+class GNXError extends Error{
+  constructor(message,code){
+    super(message)
+    this.extensions = {
+      code: code,
+      timestamp: new Date().toUTCString()
+    }
+    
+    this.getCode = ()=>{
+      return this.extensions.code
+    }
+  
+    this.getTimestamp = () => {
+      return this.extensions.timestamp
+    }
+  
+  }
+
+  
+
+}
+
+class InternalServerError extends GNXError{
+  constructor(message, cause){
+    super(message,"INTERNAL_SERVER_ERROR")
+    this.cause = cause
+    this.getCause = () =>{
+      return this.cause
+    }
+  }
+}
+
+const buildErrorFormatter = (callback) => {
+  let formatError =  function(err){
+    let result = null
+    if(err instanceof GNXError){
+      result = err
+    } else {
+      result = new InternalServerError(err.message, err)
+    }
+    
+    if(callback){
+       callback(result)
+    }
+    return result
+  }
+  return formatError
+}
+
+module.exports.buildErrorFormatter = buildErrorFormatter
+
+module.exports.GNXError = GNXError
+
+module.exports.InternalServerError = InternalServerError
+
 /* Schema defines data on the Graph like object types(book type), relation between
 these object types and describes how it can reach into the graph to interact with
 the data to retrieve or mutate the data */
@@ -735,6 +791,8 @@ const generateModel = function (gqlType, onModelCreated) {
   model.createCollection()
   return model
 }
+
+
 
 const typesDict = { types: {} }
 const waitingInputType = {}
