@@ -15,50 +15,45 @@ const operations = {
   STATE_CHANGED: 'state_changed'
 }
 
-
-class GNXError extends Error{
-  constructor(message,code){
+class GNXError extends Error {
+  constructor (message, code) {
     super(message)
     this.extensions = {
       code: code,
       timestamp: new Date().toUTCString()
     }
-    
-    this.getCode = ()=>{
+
+    this.getCode = () => {
       return this.extensions.code
     }
-  
+
     this.getTimestamp = () => {
       return this.extensions.timestamp
     }
-  
   }
-
-  
-
 }
 
-class InternalServerError extends GNXError{
-  constructor(message, cause){
-    super(message,"INTERNAL_SERVER_ERROR")
+class InternalServerError extends GNXError {
+  constructor (message, cause) {
+    super(message, 'INTERNAL_SERVER_ERROR')
     this.cause = cause
-    this.getCause = () =>{
+    this.getCause = () => {
       return this.cause
     }
   }
 }
 
 const buildErrorFormatter = (callback) => {
-  let formatError =  function(err){
+  const formatError = function (err) {
     let result = null
-    if(err instanceof GNXError){
+    if (err instanceof GNXError) {
       result = err
     } else {
       result = new InternalServerError(err.message, err)
     }
-    
-    if(callback){
-       callback(result)
+
+    if (callback) {
+      callback(result)
     }
     return result
   }
@@ -785,8 +780,6 @@ const generateModel = function (gqlType, onModelCreated) {
   return model
 }
 
-
-
 const typesDict = { types: {} }
 const waitingInputType = {}
 const typesDictForUpdate = { types: {} }
@@ -908,9 +901,11 @@ const buildQuery = async function (input, gqltype) {
 }
 const buildMatchesClause = function (fieldname, operator, value) {
   const matches = {}
-
   if (operator === QLOperator.getValue('EQ').value || !operator) {
-    if (mongoose.Types.ObjectId.isValid(value)) value = new mongoose.Types.ObjectId(value)
+    if (mongoose.Types.ObjectId.isValid(value)) {
+      if (fieldname === 'id') fieldname = '_id'
+      value = new mongoose.Types.ObjectId(value)
+    };
     matches[fieldname] = value
   } else if (operator === QLOperator.getValue('LT').value) {
     matches[fieldname] = { $lt: value }
