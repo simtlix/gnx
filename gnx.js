@@ -229,6 +229,8 @@ const buildInputType = function (model, gqltype) {
   const fieldsArgs = {}
   const fieldsArgForUpdate = {}
 
+  const selfReferenceCollections = {} 
+
   for (const fieldEntryName in argTypes) {
     const fieldEntry = argTypes[fieldEntryName]
     const fieldArg = {}
@@ -271,8 +273,15 @@ const buildInputType = function (model, gqltype) {
         console.warn('Configuration issue: Field ' + fieldEntryName + ' does not define extensions.relation')
       }
     } else if (fieldEntry.type instanceof GraphQLList) {
-      fieldArg.type = graphQLListInputType(typesDict, fieldEntry, fieldEntryName, 'A')
-      fieldArgForUpdate.type = graphQLListInputType(typesDictForUpdate, fieldEntry, fieldEntryName, 'U')
+
+      if(fieldEntry.type.ofType === gqltype){
+        selfReferenceCollections[fieldEntryName] = fieldEntry
+      }else{
+        fieldArg.type = graphQLListInputType(typesDict, fieldEntry, fieldEntryName, 'A')
+        fieldArgForUpdate.type = graphQLListInputType(typesDictForUpdate, fieldEntry, fieldEntryName, 'U')
+      }
+
+      
     }
 
     if (fieldArg.type) {
@@ -294,7 +303,52 @@ const buildInputType = function (model, gqltype) {
     fields: fieldsArgForUpdate
   }
 
-  return { inputTypeBody: new GraphQLInputObjectType(inputTypeBody), inputTypeBodyForUpdate: new GraphQLInputObjectType(inputTypeBodyForUpdate) }
+  const inputTypeForAdd = new GraphQLInputObjectType(inputTypeBody)
+  const inputTypeForUpdate = new GraphQLInputObjectType(inputTypeBodyForUpdate)
+
+
+  let inputTypeForAddFields = inputTypeForAdd._fields()
+
+  for (const fieldEntryName in selfReferenceCollections) {
+    if (selfReferenceCollections.hasOwnProperty(fieldEntryName)) {
+      inputTypeForAddFields[fieldEntryName] = {
+        type: createOneToManyInputType('A', fieldEntryName, inputTypeForAdd, inputTypeForUpdate),
+        name: fieldEntryName
+      }
+    }
+  }
+
+  inputTypeForAdd._fields = function(){
+    return inputTypeForAddFields
+  }
+
+  let inputTypeForUpdateFields = inputTypeForUpdate._fields()
+
+  for (const fieldEntryName in selfReferenceCollections) {
+    if (selfReferenceCollections.hasOwnProperty(fieldEntryName)) {
+      inputTypeForUpdateFields[fieldEntryName] = {
+        type: createOneToManyInputType('U', fieldEntryName, inputTypeForAdd, inputTypeForUpdate),
+        name: fieldEntryName
+      }
+    }
+  }
+
+  inputTypeForUpdate._fields = function(){
+    return inputTypeForUpdateFields
+  }
+
+  return { inputTypeBody: inputTypeForAdd, inputTypeBodyForUpdate: inputTypeForUpdate }
+}
+
+const createOneToManyInputType = function(inputNamePrefix, fieldEntryName, inputType, updateInputType){
+  return new GraphQLInputObjectType({
+    name: 'OneToMany' + inputNamePrefix + fieldEntryName,
+    fields: () => ({
+      added: { type: new GraphQLList(inputType) },
+      updated: { type: new GraphQLList(updateInputType) },
+      deleted: { type: new GraphQLList(GraphQLID) }
+    })
+  })
 }
 
 const graphQLListInputType = function (dict, fieldEntry, fieldEntryName, inputNamePrefix) {
@@ -302,15 +356,7 @@ const graphQLListInputType = function (dict, fieldEntry, fieldEntryName, inputNa
 
   if (ofType instanceof GraphQLObjectType && dict.types[ofType.name].inputType) {
     if (!fieldEntry.extensions || !fieldEntry.extensions.relation || !fieldEntry.extensions.relation.embedded) {
-      const oneToMany = new GraphQLInputObjectType({
-        name: 'OneToMany' + inputNamePrefix + fieldEntryName,
-        fields: () => ({
-          added: { type: new GraphQLList(typesDict.types[ofType.name].inputType) },
-          updated: { type: new GraphQLList(typesDictForUpdate.types[ofType.name].inputType) },
-          deleted: { type: new GraphQLList(typesDict.types[ofType.name].inputType) }
-        })
-      })
-
+      const oneToMany = createOneToManyInputType(inputNamePrefix, fieldEntryName, typesDict.types[ofType.name].inputType, typesDictForUpdate.types[ofType.name].inputType)
       return oneToMany
     } else if (fieldEntry.extensions && fieldEntry.extensions.relation && fieldEntry.extensions.relation.embedded) {
       return new GraphQLList(dict.types[ofType.name].inputType)
