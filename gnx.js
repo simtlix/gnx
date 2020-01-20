@@ -949,7 +949,6 @@ const buildMatchesClause = function (fieldname, operator, value) {
   const matches = {}
   if (operator === QLOperator.getValue('EQ').value || !operator) {
     if (mongoose.Types.ObjectId.isValid(value)) {
-      if (fieldname === 'id') fieldname = '_id'
       value = new mongoose.Types.ObjectId(value)
     };
     matches[fieldname] = value
@@ -981,7 +980,7 @@ const buildQueryTerms = async function (filterField, qlField, fieldName) {
   const matchesClauses = {}
 
   if (qlField.type instanceof GraphQLScalarType || isNonNullOfType(qlField.type, GraphQLScalarType)) {
-    matchesClauses[fieldName] = buildMatchesClause(fieldName, filterField.operator, filterField.value)
+    matchesClauses[fieldName] = buildMatchesClause(fieldName === "id"?"_id":fieldName, filterField.operator, filterField.value)
   } else if (qlField.type instanceof GraphQLObjectType || qlField.type instanceof GraphQLList || isNonNullOfType(qlField.type, GraphQLObjectType)) {
     let fieldType = qlField.type
 
@@ -1025,10 +1024,10 @@ const buildQueryTerms = async function (filterField, qlField, fieldName) {
       }
 
       if (term.path.indexOf('.') < 0) {
-        matchesClauses[fieldName] = buildMatchesClause(fieldName + '.' + term.path, term.operator, term.value)
+        matchesClauses[fieldName] = buildMatchesClause(fieldName + '.' + (fieldType.getFields()[term.path].name === "id"?"_id":term.path) , term.operator, term.value)
       } else {
         let currentGQLPathFieldType = qlField.type
-        if (currentGQLPathFieldType instanceof GraphQLList) {
+        if (currentGQLPathFieldType instanceof GraphQLList || currentGQLPathFieldType instanceof GraphQLNonNull) {
           currentGQLPathFieldType = currentGQLPathFieldType.ofType
         }
         let aliasPath = fieldName
@@ -1037,7 +1036,7 @@ const buildQueryTerms = async function (filterField, qlField, fieldName) {
         term.path.split('.').forEach((pathFieldName) => {
           const pathField = currentGQLPathFieldType.getFields()[pathFieldName]
           if (pathField.type instanceof GraphQLScalarType || isNonNullOfType(pathField.type, GraphQLScalarType)) {
-            matchesClauses[aliasPath + '_' + pathFieldName] = buildMatchesClause(aliasPath + (embeddedPath !== '' ? '.' + embeddedPath + '.' : '.') + pathFieldName, term.operator, term.value)
+            matchesClauses[aliasPath + '_' + pathFieldName] = buildMatchesClause(aliasPath + (embeddedPath !== '' ? '.' + embeddedPath + '.' : '.') + (pathFieldName === "id"?"_id":pathFieldName), term.operator, term.value)
             embeddedPath = ''
           } else if (pathField.type instanceof GraphQLObjectType || pathField.type instanceof GraphQLList || isNonNullOfType(pathField.type, GraphQLObjectType)) {
             let pathFieldType = pathField.type
