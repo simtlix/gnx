@@ -277,11 +277,15 @@ const buildInputType = function (model, gqltype) {
       if(fieldEntry.type.ofType === gqltype){
         selfReferenceCollections[fieldEntryName] = fieldEntry
       }else{
-        fieldArg.type = graphQLListInputType(typesDict, fieldEntry, fieldEntryName, 'A')
-        fieldArgForUpdate.type = graphQLListInputType(typesDictForUpdate, fieldEntry, fieldEntryName, 'U')
+        const listInputTypeForAdd = graphQLListInputType(typesDict, fieldEntry, fieldEntryName, 'A')
+        const listInputTypeForUpdate = graphQLListInputType(typesDictForUpdate, fieldEntry, fieldEntryName, 'U')
+        if(listInputTypeForAdd && listInputTypeForUpdate){
+          fieldArg.type = listInputTypeForAdd
+          fieldArgForUpdate.type = listInputTypeForUpdate
+        } else {
+          return null
+        }
       }
-
-      
     }
 
     if (fieldArg.type) {
@@ -376,11 +380,11 @@ const buildPendingInputTypes = function (waitingInputType) {
     const model = waitingInputType[pendingInputTypeName].model
     const gqltype = waitingInputType[pendingInputTypeName].gqltype
 
-    const { inputTypeBody, inputTypeBodyForUpdate } = buildInputType(model, gqltype)
+    const buildInputTypeResult = buildInputType(model, gqltype)
 
-    if (inputTypeBody && inputTypeBodyForUpdate) {
-      typesDict.types[gqltype.name].inputType = inputTypeBody
-      typesDictForUpdate.types[gqltype.name].inputType = inputTypeBodyForUpdate
+    if (buildInputTypeResult && buildInputTypeResult.inputTypeBody && buildInputTypeResult.inputTypeBodyForUpdate) {
+      typesDict.types[gqltype.name].inputType = buildInputTypeResult.inputTypeBody
+      typesDictForUpdate.types[gqltype.name].inputType = buildInputTypeResult.inputTypeBodyForUpdate
     } else {
       stillWaitingInputType[pendingInputTypeName] = waitingInputType[pendingInputTypeName]
       isThereAtLeastOneWaiting = true
