@@ -971,10 +971,11 @@ const buildQuery = async function (input, gqltype) {
 const buildMatchesClause = function (fieldname, operator, value) {
   const matches = {}
   if (operator === QLOperator.getValue('EQ').value || !operator) {
-    if (mongoose.Types.ObjectId.isValid(value)) {
-      value = new mongoose.Types.ObjectId(value)
+    let fixedValue = value
+    if (fieldname.endsWith('_id')) {
+      fixedValue = new mongoose.Types.ObjectId(value)
     };
-    matches[fieldname] = value
+    matches[fieldname] = fixedValue
   } else if (operator === QLOperator.getValue('LT').value) {
     matches[fieldname] = { $lt: value }
   } else if (operator === QLOperator.getValue('GT').value) {
@@ -988,9 +989,25 @@ const buildMatchesClause = function (fieldname, operator, value) {
   } else if (operator === QLOperator.getValue('BTW').value) {
     matches[fieldname] = { $gte: value[0], $lte: value[1] }
   } else if (operator === QLOperator.getValue('IN').value) {
-    matches[fieldname] = { $in: value }
+    let fixedArray = value
+    if(value && fieldname.endsWith('_id')){
+      fixedArray = []
+      for (let index = 0; index < value.length; index++) {
+        const element = value[index];
+        fixedArray.push(new mongoose.Types.ObjectId(element))
+      }
+    }
+    matches[fieldname] = { $in: fixedArray }
   } else if (operator === QLOperator.getValue('NIN').value) {
-    matches[fieldname] = { $nin: value }
+    let fixedArray = value
+    if(value && fieldname.endsWith('_id')){
+      fixedArray = []
+      for (let index = 0; index < value.length; index++) {
+        const element = value[index];
+        fixedArray.push(new mongoose.Types.ObjectId(element))
+      }
+    }
+    matches[fieldname] = { $nin: fixedArray }
   } else if (operator === QLOperator.getValue('LIKE').value) {
     matches[fieldname] = { $regex: '.*' + value + '.*' }
   }
