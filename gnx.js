@@ -606,7 +606,7 @@ const onUpdateSubject = async function (Model, gqltype, controller, args, sessio
   const objectId = args.id
 
   if (materializedModel.collectionFields) {
-    iterateonCollectionFields(materializedModel, gqltype, objectId, session)
+    await iterateonCollectionFields(materializedModel, gqltype, objectId, session)
   }
 
   let modifiedObject = materializedModel.modelArgs
@@ -718,9 +718,11 @@ const executeItemFunction = async function (gqltype, collectionField, objectId, 
     // TODO: implement
   }
 
-  collectionFieldsList.forEach(async collectionItem => {
-    await operationFunction(collectionItem)
-  })
+  for (let index = 0; index < collectionFieldsList.length; index++) {
+    const element = collectionFieldsList[index];
+    await operationFunction(element)
+  } 
+
 }
 
 const buildMutation = function (name) {
@@ -740,14 +742,14 @@ const buildMutation = function (name) {
         type: type.gqltype,
         args: argsObject,
         async resolve (parent, args) {
-          return executeOperation(type.model, type.gqltype, type.controller, args.input, operations.SAVE)
+          return await executeOperation(type.model, type.gqltype, type.controller, args.input, operations.SAVE)
         }
       }
       rootQueryArgs.fields['delete' + type.simpleEntityEndpointName] = {
         type: type.gqltype,
         args: { id: { type: new GraphQLNonNull(GraphQLID) } },
         async resolve (parent, args) {
-          return executeOperation(type.model, type.gqltype, type.controller, args.id, operations.DELETE)
+          return await executeOperation(type.model, type.gqltype, type.controller, args.id, operations.DELETE)
         }
       }
     }
@@ -762,7 +764,7 @@ const buildMutation = function (name) {
         type: type.gqltype,
         args: argsObject,
         async resolve (parent, args) {
-          return executeOperation(type.model, type.gqltype, type.controller, args.input, operations.UPDATE)
+          return await executeOperation(type.model, type.gqltype, type.controller, args.input, operations.UPDATE)
         }
       }
       if (type.stateMachine) {
@@ -773,7 +775,7 @@ const buildMutation = function (name) {
               type: type.gqltype,
               args: argsObject,
               async resolve (parent, args) {
-                return executeOperation(type.model, type.gqltype, type.controller, args.input, operations.STATE_CHANGED, actionField)
+                return await executeOperation(type.model, type.gqltype, type.controller, args.input, operations.STATE_CHANGED, actionField)
               }
             }
           }
