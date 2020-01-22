@@ -664,7 +664,7 @@ const onSaveObject = async function (Model, gqltype, controller, args, session, 
   }
 
   if (materializedModel.collectionFields) {
-    iterateonCollectionFields(materializedModel, gqltype, newObject._id, session)
+    await iterateonCollectionFields(materializedModel, gqltype, newObject._id, session)
   }
 
   let result = await newObject.save()
@@ -678,38 +678,38 @@ const onSaveObject = async function (Model, gqltype, controller, args, session, 
   return result
 }
 
-const iterateonCollectionFields = function (materializedModel, gqltype, objectId, session) {
+const iterateonCollectionFields = async function (materializedModel, gqltype, objectId, session) {
   for (const collectionField in materializedModel.collectionFields) {
     if (materializedModel.collectionFields[collectionField].added) {
-      executeItemFunction(gqltype, collectionField, objectId, session, materializedModel.collectionFields[collectionField].added, operations.SAVE)
+      await executeItemFunction(gqltype, collectionField, objectId, session, materializedModel.collectionFields[collectionField].added, operations.SAVE)
     }
     if (materializedModel.collectionFields[collectionField].updated) {
-      executeItemFunction(gqltype, collectionField, objectId, session, materializedModel.collectionFields[collectionField].updated, operations.UPDATE)
+      await executeItemFunction(gqltype, collectionField, objectId, session, materializedModel.collectionFields[collectionField].updated, operations.UPDATE)
     }
     if (materializedModel.collectionFields[collectionField].deleted) {
-      executeItemFunction(gqltype, collectionField, objectId, session, materializedModel.collectionFields[collectionField].deleted, operations.DELETE)
+      await executeItemFunction(gqltype, collectionField, objectId, session, materializedModel.collectionFields[collectionField].deleted, operations.DELETE)
     }
   }
 }
 
-const executeItemFunction = function (gqltype, collectionField, objectId, session, collectionFieldsList, operationType) {
+const executeItemFunction = async function (gqltype, collectionField, objectId, session, collectionFieldsList, operationType) {
   const argTypes = gqltype.getFields()
   const collectionGQLType = argTypes[collectionField].type.ofType
   const connectionField = argTypes[collectionField].extensions.relation.connectionField
 
-  let operationFunction = function () {}
+  let operationFunction = async function () {}
 
   switch (operationType) {
     case operations.SAVE:
-      operationFunction = collectionItem => {
-        onSaveObject(typesDict.types[collectionGQLType.name].model, collectionGQLType, typesDict.types[collectionGQLType.name].controller, collectionItem, session, (item) => {
+      operationFunction = async collectionItem => {
+        await onSaveObject(typesDict.types[collectionGQLType.name].model, collectionGQLType, typesDict.types[collectionGQLType.name].controller, collectionItem, session, (item) => {
           item[connectionField] = objectId
         })
       }
       break
     case operations.UPDATE:
-      operationFunction = collectionItem => {
-        onUpdateSubject(typesDict.types[collectionGQLType.name].model, collectionGQLType, typesDict.types[collectionGQLType.name].controller, collectionItem, session, (item) => {
+      operationFunction = async collectionItem => {
+        await onUpdateSubject(typesDict.types[collectionGQLType.name].model, collectionGQLType, typesDict.types[collectionGQLType.name].controller, collectionItem, session, (item) => {
           item[connectionField] = objectId
         })
       }
@@ -718,8 +718,8 @@ const executeItemFunction = function (gqltype, collectionField, objectId, sessio
     // TODO: implement
   }
 
-  collectionFieldsList.forEach(collectionItem => {
-    operationFunction(collectionItem)
+  collectionFieldsList.forEach(async collectionItem => {
+    await operationFunction(collectionItem)
   })
 }
 
