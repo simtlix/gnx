@@ -776,6 +776,7 @@ const buildMutation = function (name) {
             const actionField = type.stateMachine.actions[actionName]
             rootQueryArgs.fields[actionName + '_' + type.simpleEntityEndpointName] = {
               type: type.gqltype,
+              description: actionField.description,
               args: argsObject,
               async resolve (parent, args) {
                 return await executeOperation(type.model, type.gqltype, type.controller, args.input, operations.STATE_CHANGED, actionField)
