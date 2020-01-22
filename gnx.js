@@ -475,6 +475,13 @@ const materializeModel = function (args, gqltype, linkToParent) {
   const modelArgs = {}
   const collectionFields = {}
 
+
+  if(gqltype.extensions && gqltype.extensions.validations) {
+    gqltype.extensions.validations.forEach((validator)=>{
+      validator.validate(gqltype.name, args)
+    })
+  }
+
   for (const fieldEntryName in argTypes) {
     const fieldEntry = argTypes[fieldEntryName]
 
