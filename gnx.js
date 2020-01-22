@@ -476,11 +476,7 @@ const materializeModel = function (args, gqltype, linkToParent) {
   const collectionFields = {}
 
 
-  if(gqltype.extensions && gqltype.extensions.validations) {
-    gqltype.extensions.validations.forEach((validator)=>{
-      validator.validate(gqltype.name, args)
-    })
-  }
+  
 
   for (const fieldEntryName in argTypes) {
     const fieldEntry = argTypes[fieldEntryName]
@@ -535,6 +531,12 @@ const materializeModel = function (args, gqltype, linkToParent) {
   }
   if (linkToParent) {
     linkToParent(modelArgs)
+  }
+
+  if(gqltype.extensions && gqltype.extensions.validations) {
+    gqltype.extensions.validations.forEach((validator)=>{
+      validator.validate(gqltype.name, args, modelArgs)
+    })
   }
 
   return { modelArgs: modelArgs, collectionFields: collectionFields }
