@@ -617,7 +617,7 @@ const onUpdateSubject = async function (Model, gqltype, controller, args, sessio
   }
 
   if (controller && controller.onUpdating) {
-    await controller.onUpdating(objectId, modifiedObject)
+    await controller.onUpdating(objectId, modifiedObject, args)
   }
 
   const result = Model.findByIdAndUpdate(
@@ -625,7 +625,7 @@ const onUpdateSubject = async function (Model, gqltype, controller, args, sessio
   )
 
   if (controller && controller.onUpdated) {
-    await controller.onUpdated(result)
+    await controller.onUpdated(result, args)
   }
 
   return result
@@ -643,7 +643,7 @@ const onSaveObject = async function (Model, gqltype, controller, args, session, 
   newObject.$session(session)
 
   if (controller && controller.onSaving) {
-    await controller.onSaving(newObject)
+    await controller.onSaving(newObject, args)
   }
 
   if (materializedModel.collectionFields) {
@@ -653,7 +653,7 @@ const onSaveObject = async function (Model, gqltype, controller, args, session, 
   let result = await newObject.save()
   result = result.toObject()
   if (controller && controller.onSaved) {
-    await controller.onSaved(result)
+    await controller.onSaved(result, args)
   }
   if (typesDict.types[gqltype.name].stateMachine) {
     result.state = typesDict.types[gqltype.name].stateMachine.initialState.value
