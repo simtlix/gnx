@@ -478,9 +478,17 @@ const materializeModel = function (args, gqltype, linkToParent) {
   for (const fieldEntryName in argTypes) {
     const fieldEntry = argTypes[fieldEntryName]
 
+    if(fieldEntry.extensions && fieldEntry.extensions.validations){
+      validations.forEach((validator)=>{
+        validator.validate(args[fieldEntryName])
+      })
+    }
+
     if (isEmpty(args[fieldEntryName])) {
       continue
     }
+
+    
 
     if (fieldEntry.type instanceof GraphQLScalarType || fieldEntry.type instanceof GraphQLEnumType ||
       isNonNullOfType(fieldEntry.type, GraphQLScalarType) || isNonNullOfType(fieldEntry.type, GraphQLEnumType)) {
