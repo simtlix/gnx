@@ -223,7 +223,7 @@ const isNonNullOfTypeForNotScalar = function (fieldEntryType, graphQLType) {
   return isOfType
 }
 
-const buildInputType = function (model, gqltype) {
+const buildInputType = function (gqltype) {
   const argTypes = gqltype.getFields()
 
   const fieldsArgs = {}
@@ -287,6 +287,9 @@ const buildInputType = function (model, gqltype) {
         }
       }
     }
+
+    fieldArg.description = fieldEntry.description
+    fieldArgForUpdate.description = fieldEntry.description
 
     if (fieldArg.type) {
       fieldsArgs[fieldEntryName] = fieldArg
@@ -380,7 +383,7 @@ const buildPendingInputTypes = function (waitingInputType) {
     const model = waitingInputType[pendingInputTypeName].model
     const gqltype = waitingInputType[pendingInputTypeName].gqltype
 
-    const buildInputTypeResult = buildInputType(model, gqltype)
+    const buildInputTypeResult = buildInputType(gqltype)
 
     if (buildInputTypeResult && buildInputTypeResult.inputTypeBody && buildInputTypeResult.inputTypeBodyForUpdate) {
       typesDict.types[gqltype.name].inputType = buildInputTypeResult.inputTypeBody
