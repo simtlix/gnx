@@ -23,13 +23,8 @@ class GNXError extends Error {
       timestamp: new Date().toUTCString()
     }
 
-    this.getCode = () => {
-      return this.extensions.code
-    }
-
-    this.getTimestamp = () => {
-      return this.extensions.timestamp
-    }
+    this.getCode = () => this.extensions.code
+    this.getTimestamp = () => this.extensions.timestamp
   }
 }
 
@@ -37,9 +32,7 @@ class InternalServerError extends GNXError {
   constructor (message, cause) {
     super(message, 'INTERNAL_SERVER_ERROR')
     this.cause = cause
-    this.getCause = () => {
-      return this.cause
-    }
+    this.getCause = () => this.cause
   }
 }
 
@@ -323,9 +316,7 @@ const buildInputType = function (gqltype) {
     }
   }
 
-  inputTypeForAdd._fields = function () {
-    return inputTypeForAddFields
-  }
+  inputTypeForAdd._fields = () => inputTypeForAddFields
 
   const inputTypeForUpdateFields = inputTypeForUpdate._fields()
 
@@ -338,9 +329,7 @@ const buildInputType = function (gqltype) {
     }
   }
 
-  inputTypeForUpdate._fields = function () {
-    return inputTypeForUpdateFields
-  }
+  inputTypeForUpdate._fields = () => inputTypeForUpdateFields
 
   return { inputTypeBody: inputTypeForAdd, inputTypeBodyForUpdate: inputTypeForUpdate }
 }
@@ -405,7 +394,7 @@ const buildRootQuery = function (name) {
 
     // Fixing resolve method in order to be compliant with Mongo _id field
     if (type.gqltype.getFields().id && !type.gqltype.getFields().id.resolve) {
-      type.gqltype.getFields().id.resolve = function (parent) { return parent._id }
+      type.gqltype.getFields().id.resolve = parent => parent._id
     }
 
     rootQueryArgs.fields[type.simpleEntityEndpointName] = {
@@ -460,9 +449,7 @@ const buildRootQuery = function (name) {
   return new GraphQLObjectType(rootQueryArgs)
 }
 
-const isEmpty = function (value) {
-  return !value && value !== false
-}
+const isEmpty = value => !value && value !== false
 
 const materializeModel = async function (args, gqltype, linkToParent) {
   if (!args) {
@@ -478,8 +465,7 @@ const materializeModel = async function (args, gqltype, linkToParent) {
     const fieldEntry = argTypes[fieldEntryName]
 
     if (fieldEntry.extensions && fieldEntry.extensions.validations) {
-      for (let index = 0; index < fieldEntry.extensions.validations.length; index++) {
-        const validator = fieldEntry.extensions.validations[index]
+      for (const validator of fieldEntry.extensions.validations) {
         await validator.validate(gqltype.name, fieldEntryName, args[fieldEntryName])
       }
     }
@@ -510,8 +496,7 @@ const materializeModel = async function (args, gqltype, linkToParent) {
         } else if (fieldEntry.extensions.relation.embedded) {
           const collectionEntries = []
 
-          for (let index = 0; index < args[fieldEntryName].length; index++) {
-            const element = args[fieldEntryName][index]
+          for (const element of args[fieldEntryName]) {
             const collectionEntry = await materializeModel(element, ofType).modelArgs
             if (collectionEntry) {
               collectionEntries.push(collectionEntry)
@@ -529,8 +514,7 @@ const materializeModel = async function (args, gqltype, linkToParent) {
   }
 
   if (gqltype.extensions && gqltype.extensions.validations) {
-    for (let index = 0; index < gqltype.extensions.validations.length; index++) {
-      const validator = gqltype.extensions.validations[index]
+    for (const validator of gqltype.extensions.validations) {
       await validator.validate(gqltype.name, args, modelArgs)
     }
   }
@@ -714,8 +698,7 @@ const executeItemFunction = async function (gqltype, collectionField, objectId, 
     // TODO: implement
   }
 
-  for (let index = 0; index < collectionFieldsList.length; index++) {
-    const element = collectionFieldsList[index]
+  for (const element of collectionFieldsList) {
     await operationFunction(element)
   }
 }
@@ -858,9 +841,7 @@ module.exports.createSchema = function () {
   })
 }
 
-module.exports.getModel = function (gqltype) {
-  return typesDict.types[gqltype.name].model
-}
+module.exports.getModel = gqltype => typesDict.types[gqltype.name].model
 
 module.exports.connect = function (model, gqltype, simpleEntityEndpointName, listEntitiesEndpointName, controller, onModelCreated, stateMachine) {
   waitingInputType[gqltype.name] = {
@@ -988,8 +969,7 @@ const buildMatchesClause = function (fieldname, operator, value) {
     let fixedArray = value
     if (value && fieldname.endsWith('_id')) {
       fixedArray = []
-      for (let index = 0; index < value.length; index++) {
-        const element = value[index]
+      for (const element of value) {
         fixedArray.push(new mongoose.Types.ObjectId(element))
       }
     }
@@ -998,8 +978,7 @@ const buildMatchesClause = function (fieldname, operator, value) {
     let fixedArray = value
     if (value && fieldname.endsWith('_id')) {
       fixedArray = []
-      for (let index = 0; index < value.length; index++) {
-        const element = value[index]
+      for (const element of value) {
         fixedArray.push(new mongoose.Types.ObjectId(element))
       }
     }
