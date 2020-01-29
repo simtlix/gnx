@@ -468,7 +468,7 @@ const isEmpty = function (value) {
   return !value && value !== false
 }
 
-const materializeModel = function (args, gqltype, linkToParent) {
+const materializeModel = async function (args, gqltype, linkToParent) {
   if (!args) {
     return null
   }
@@ -485,9 +485,11 @@ const materializeModel = function (args, gqltype, linkToParent) {
     const fieldEntry = argTypes[fieldEntryName]
 
     if(fieldEntry.extensions && fieldEntry.extensions.validations){
-      fieldEntry.extensions.validations.forEach((validator)=>{
-        validator.validate(gqltype.name, fieldEntryName, args[fieldEntryName])
-      })
+
+      for (let index = 0; index < fieldEntry.extensions.validations.length; index++) {
+        const validator = fieldEntry.extensions.validations[index];
+        await validator.validate(gqltype.name, fieldEntryName, args[fieldEntryName])
+      }
     }
 
     if (isEmpty(args[fieldEntryName])) {
@@ -505,7 +507,7 @@ const materializeModel = function (args, gqltype, linkToParent) {
           modelArgs[fieldEntry.extensions.relation.connectionField] = new mongoose.Types.ObjectId(args[fieldEntryName].id)
         } else {
           const fieldType = fieldEntry.type instanceof GraphQLNonNull ? fieldEntry.type.ofType : fieldEntry.type
-          modelArgs[fieldEntryName] = materializeModel(args[fieldEntryName], fieldType).modelArgs
+          modelArgs[fieldEntryName] = await materializeModel(args[fieldEntryName], fieldType).modelArgs
         }
       } else {
         console.warn('Configuration issue: Field ' + fieldEntryName + ' does not define extensions.relation')
@@ -518,13 +520,13 @@ const materializeModel = function (args, gqltype, linkToParent) {
         } else if (fieldEntry.extensions.relation.embedded) {
           const collectionEntries = []
 
-          args[fieldEntryName].forEach(element => {
-            const collectionEntry = materializeModel(element, ofType).modelArgs
+          for (let index = 0; index < args[fieldEntryName].length; index++) {
+            const element = args[fieldEntryName][index];
+            const collectionEntry = await materializeModel(element, ofType).modelArgs
             if (collectionEntry) {
               collectionEntries.push(collectionEntry)
             }
-          })
-
+          }
           modelArgs[fieldEntryName] = collectionEntries
         }
       } else if (ofType instanceof GraphQLScalarType || ofType instanceof GraphQLEnumType) {
@@ -537,9 +539,11 @@ const materializeModel = function (args, gqltype, linkToParent) {
   }
 
   if(gqltype.extensions && gqltype.extensions.validations) {
-    gqltype.extensions.validations.forEach((validator)=>{
-      validator.validate(gqltype.name, args, modelArgs)
-    })
+
+    for (let index = 0; index < gqltype.extensions.validations.length; index++) {
+      const validator = gqltype.extensions.validations[index];
+      await validator.validate(gqltype.name, args, modelArgs)
+    }
   }
 
   return { modelArgs: modelArgs, collectionFields: collectionFields }
@@ -576,7 +580,7 @@ const executeOperation = async function (Model, gqltype, controller, args, opera
 }
 
 const onDeleteObject = async function (Model, gqltype, controller, args, session, linkToParent) {
-  const result = materializeModel(args, gqltype, linkToParent)
+  const result = await materializeModel(args, gqltype, linkToParent)
   const deletedObject = new Model(result.modelArgs)
 
   if (controller && controller.onDelete) {
@@ -605,7 +609,7 @@ const onStateChanged = async function (Model, gqltype, controller, args, session
 }
 
 const onUpdateSubject = async function (Model, gqltype, controller, args, session, linkToParent) {
-  const materializedModel = materializeModel(args, gqltype, linkToParent)
+  const materializedModel = await materializeModel(args, gqltype, linkToParent)
   const objectId = args.id
 
   if (materializedModel.collectionFields) {
@@ -652,7 +656,7 @@ const onUpdateSubject = async function (Model, gqltype, controller, args, sessio
 }
 
 const onSaveObject = async function (Model, gqltype, controller, args, session, linkToParent) {
-  const materializedModel = materializeModel(args, gqltype, linkToParent)
+  const materializedModel = await materializeModel(args, gqltype, linkToParent)
 
   if (typesDict.types[gqltype.name].stateMachine) {
     materializedModel.modelArgs.state = typesDict.types[gqltype.name].stateMachine.initialState.name
