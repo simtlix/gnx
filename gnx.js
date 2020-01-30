@@ -368,6 +368,11 @@ const buildPendingInputTypes = function (waitingInputType) {
 
   for (const pendingInputTypeName in waitingInputType) {
     const gqltype = waitingInputType[pendingInputTypeName].gqltype
+
+    if (typesDict.types[gqltype.name].inputType) {
+      continue
+    }
+
     const buildInputTypeResult = buildInputType(gqltype)
 
     if (buildInputTypeResult && buildInputTypeResult.inputTypeBody && buildInputTypeResult.inputTypeBodyForUpdate) {
@@ -483,7 +488,7 @@ const materializeModel = async function (args, gqltype, linkToParent) {
           modelArgs[fieldEntry.extensions.relation.connectionField] = new mongoose.Types.ObjectId(args[fieldEntryName].id)
         } else {
           const fieldType = fieldEntry.type instanceof GraphQLNonNull ? fieldEntry.type.ofType : fieldEntry.type
-          modelArgs[fieldEntryName] = await materializeModel(args[fieldEntryName], fieldType).modelArgs
+          modelArgs[fieldEntryName] = (await materializeModel(args[fieldEntryName], fieldType)).modelArgs
         }
       } else {
         console.warn('Configuration issue: Field ' + fieldEntryName + ' does not define extensions.relation')
@@ -497,7 +502,7 @@ const materializeModel = async function (args, gqltype, linkToParent) {
           const collectionEntries = []
 
           for (const element of args[fieldEntryName]) {
-            const collectionEntry = await materializeModel(element, ofType).modelArgs
+            const collectionEntry = (await materializeModel(element, ofType)).modelArgs
             if (collectionEntry) {
               collectionEntries.push(collectionEntry)
             }
