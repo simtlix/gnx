@@ -380,8 +380,11 @@ const buildPendingInputTypes = function (waitingInputType) {
   let isThereAtLeastOneWaiting = false
 
   for (const pendingInputTypeName in waitingInputType) {
-    const model = waitingInputType[pendingInputTypeName].model
     const gqltype = waitingInputType[pendingInputTypeName].gqltype
+
+    if(typesDict.types[gqltype.name].inputType){
+      continue
+    }
 
     const buildInputTypeResult = buildInputType(gqltype)
 
