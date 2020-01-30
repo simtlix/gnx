@@ -23,13 +23,8 @@ class GNXError extends Error {
       timestamp: new Date().toUTCString()
     }
 
-    this.getCode = () => {
-      return this.extensions.code
-    }
-
-    this.getTimestamp = () => {
-      return this.extensions.timestamp
-    }
+    this.getCode = () => this.extensions.code
+    this.getTimestamp = () => this.extensions.timestamp
   }
 }
 
@@ -37,9 +32,7 @@ class InternalServerError extends GNXError {
   constructor (message, cause) {
     super(message, 'INTERNAL_SERVER_ERROR')
     this.cause = cause
-    this.getCause = () => {
-      return this.cause
-    }
+    this.getCause = () => this.cause
   }
 }
 
@@ -229,7 +222,7 @@ const buildInputType = function (gqltype) {
   const fieldsArgs = {}
   const fieldsArgForUpdate = {}
 
-  const selfReferenceCollections = {} 
+  const selfReferenceCollections = {}
 
   for (const fieldEntryName in argTypes) {
     const fieldEntry = argTypes[fieldEntryName]
@@ -273,13 +266,12 @@ const buildInputType = function (gqltype) {
         console.warn('Configuration issue: Field ' + fieldEntryName + ' does not define extensions.relation')
       }
     } else if (fieldEntry.type instanceof GraphQLList) {
-
-      if(fieldEntry.type.ofType === gqltype){
+      if (fieldEntry.type.ofType === gqltype) {
         selfReferenceCollections[fieldEntryName] = fieldEntry
-      }else{
+      } else {
         const listInputTypeForAdd = graphQLListInputType(typesDict, fieldEntry, fieldEntryName, 'A')
         const listInputTypeForUpdate = graphQLListInputType(typesDictForUpdate, fieldEntry, fieldEntryName, 'U')
-        if(listInputTypeForAdd && listInputTypeForUpdate){
+        if (listInputTypeForAdd && listInputTypeForUpdate) {
           fieldArg.type = listInputTypeForAdd
           fieldArgForUpdate.type = listInputTypeForUpdate
         } else {
@@ -313,11 +305,10 @@ const buildInputType = function (gqltype) {
   const inputTypeForAdd = new GraphQLInputObjectType(inputTypeBody)
   const inputTypeForUpdate = new GraphQLInputObjectType(inputTypeBodyForUpdate)
 
-
-  let inputTypeForAddFields = inputTypeForAdd._fields()
+  const inputTypeForAddFields = inputTypeForAdd._fields()
 
   for (const fieldEntryName in selfReferenceCollections) {
-    if (selfReferenceCollections.hasOwnProperty(fieldEntryName)) {
+    if (Object.prototype.hasOwnProperty.call(selfReferenceCollections, fieldEntryName)) {
       inputTypeForAddFields[fieldEntryName] = {
         type: createOneToManyInputType('A', fieldEntryName, inputTypeForAdd, inputTypeForUpdate),
         name: fieldEntryName
@@ -325,14 +316,12 @@ const buildInputType = function (gqltype) {
     }
   }
 
-  inputTypeForAdd._fields = function(){
-    return inputTypeForAddFields
-  }
+  inputTypeForAdd._fields = () => inputTypeForAddFields
 
-  let inputTypeForUpdateFields = inputTypeForUpdate._fields()
+  const inputTypeForUpdateFields = inputTypeForUpdate._fields()
 
   for (const fieldEntryName in selfReferenceCollections) {
-    if (selfReferenceCollections.hasOwnProperty(fieldEntryName)) {
+    if (Object.prototype.hasOwnProperty.call(selfReferenceCollections, fieldEntryName)) {
       inputTypeForUpdateFields[fieldEntryName] = {
         type: createOneToManyInputType('U', fieldEntryName, inputTypeForAdd, inputTypeForUpdate),
         name: fieldEntryName
@@ -340,14 +329,12 @@ const buildInputType = function (gqltype) {
     }
   }
 
-  inputTypeForUpdate._fields = function(){
-    return inputTypeForUpdateFields
-  }
+  inputTypeForUpdate._fields = () => inputTypeForUpdateFields
 
   return { inputTypeBody: inputTypeForAdd, inputTypeBodyForUpdate: inputTypeForUpdate }
 }
 
-const createOneToManyInputType = function(inputNamePrefix, fieldEntryName, inputType, updateInputType){
+const createOneToManyInputType = function (inputNamePrefix, fieldEntryName, inputType, updateInputType) {
   return new GraphQLInputObjectType({
     name: 'OneToMany' + inputNamePrefix + fieldEntryName,
     fields: () => ({
@@ -382,7 +369,7 @@ const buildPendingInputTypes = function (waitingInputType) {
   for (const pendingInputTypeName in waitingInputType) {
     const gqltype = waitingInputType[pendingInputTypeName].gqltype
 
-    if(typesDict.types[gqltype.name].inputType){
+    if (typesDict.types[gqltype.name].inputType) {
       continue
     }
 
@@ -412,7 +399,7 @@ const buildRootQuery = function (name) {
 
     // Fixing resolve method in order to be compliant with Mongo _id field
     if (type.gqltype.getFields().id && !type.gqltype.getFields().id.resolve) {
-      type.gqltype.getFields().id.resolve = function (parent) { return parent._id }
+      type.gqltype.getFields().id.resolve = parent => parent._id
     }
 
     rootQueryArgs.fields[type.simpleEntityEndpointName] = {
@@ -467,9 +454,7 @@ const buildRootQuery = function (name) {
   return new GraphQLObjectType(rootQueryArgs)
 }
 
-const isEmpty = function (value) {
-  return !value && value !== false
-}
+const isEmpty = value => !value && value !== false
 
 const materializeModel = async function (args, gqltype, linkToParent) {
   if (!args) {
@@ -481,16 +466,11 @@ const materializeModel = async function (args, gqltype, linkToParent) {
   const modelArgs = {}
   const collectionFields = {}
 
-
-  
-
   for (const fieldEntryName in argTypes) {
     const fieldEntry = argTypes[fieldEntryName]
 
-    if(fieldEntry.extensions && fieldEntry.extensions.validations){
-
-      for (let index = 0; index < fieldEntry.extensions.validations.length; index++) {
-        const validator = fieldEntry.extensions.validations[index];
+    if (fieldEntry.extensions && fieldEntry.extensions.validations) {
+      for (const validator of fieldEntry.extensions.validations) {
         await validator.validate(gqltype.name, fieldEntryName, args[fieldEntryName])
       }
     }
@@ -498,8 +478,6 @@ const materializeModel = async function (args, gqltype, linkToParent) {
     if (isEmpty(args[fieldEntryName])) {
       continue
     }
-
-    
 
     if (fieldEntry.type instanceof GraphQLScalarType || fieldEntry.type instanceof GraphQLEnumType ||
       isNonNullOfType(fieldEntry.type, GraphQLScalarType) || isNonNullOfType(fieldEntry.type, GraphQLEnumType)) {
@@ -523,8 +501,7 @@ const materializeModel = async function (args, gqltype, linkToParent) {
         } else if (fieldEntry.extensions.relation.embedded) {
           const collectionEntries = []
 
-          for (let index = 0; index < args[fieldEntryName].length; index++) {
-            const element = args[fieldEntryName][index];
+          for (const element of args[fieldEntryName]) {
             const collectionEntry = (await materializeModel(element, ofType)).modelArgs
             if (collectionEntry) {
               collectionEntries.push(collectionEntry)
@@ -541,10 +518,8 @@ const materializeModel = async function (args, gqltype, linkToParent) {
     linkToParent(modelArgs)
   }
 
-  if(gqltype.extensions && gqltype.extensions.validations) {
-
-    for (let index = 0; index < gqltype.extensions.validations.length; index++) {
-      const validator = gqltype.extensions.validations[index];
+  if (gqltype.extensions && gqltype.extensions.validations) {
+    for (const validator of gqltype.extensions.validations) {
       await validator.validate(gqltype.name, args, modelArgs)
     }
   }
@@ -728,11 +703,9 @@ const executeItemFunction = async function (gqltype, collectionField, objectId, 
     // TODO: implement
   }
 
-  for (let index = 0; index < collectionFieldsList.length; index++) {
-    const element = collectionFieldsList[index];
+  for (const element of collectionFieldsList) {
     await operationFunction(element)
-  } 
-
+  }
 }
 
 const buildMutation = function (name) {
@@ -752,14 +725,14 @@ const buildMutation = function (name) {
         type: type.gqltype,
         args: argsObject,
         async resolve (parent, args) {
-          return await executeOperation(type.model, type.gqltype, type.controller, args.input, operations.SAVE)
+          return executeOperation(type.model, type.gqltype, type.controller, args.input, operations.SAVE)
         }
       }
       rootQueryArgs.fields['delete' + type.simpleEntityEndpointName] = {
         type: type.gqltype,
         args: { id: { type: new GraphQLNonNull(GraphQLID) } },
         async resolve (parent, args) {
-          return await executeOperation(type.model, type.gqltype, type.controller, args.id, operations.DELETE)
+          return executeOperation(type.model, type.gqltype, type.controller, args.id, operations.DELETE)
         }
       }
     }
@@ -774,7 +747,7 @@ const buildMutation = function (name) {
         type: type.gqltype,
         args: argsObject,
         async resolve (parent, args) {
-          return await executeOperation(type.model, type.gqltype, type.controller, args.input, operations.UPDATE)
+          return executeOperation(type.model, type.gqltype, type.controller, args.input, operations.UPDATE)
         }
       }
       if (type.stateMachine) {
@@ -786,7 +759,7 @@ const buildMutation = function (name) {
               description: actionField.description,
               args: argsObject,
               async resolve (parent, args) {
-                return await executeOperation(type.model, type.gqltype, type.controller, args.input, operations.STATE_CHANGED, actionField)
+                return executeOperation(type.model, type.gqltype, type.controller, args.input, operations.STATE_CHANGED, actionField)
               }
             }
           }
@@ -873,9 +846,7 @@ module.exports.createSchema = function () {
   })
 }
 
-module.exports.getModel = function (gqltype) {
-  return typesDict.types[gqltype.name].model
-}
+module.exports.getModel = gqltype => typesDict.types[gqltype.name].model
 
 module.exports.connect = function (model, gqltype, simpleEntityEndpointName, listEntitiesEndpointName, controller, onModelCreated, stateMachine) {
   waitingInputType[gqltype.name] = {
@@ -1001,20 +972,18 @@ const buildMatchesClause = function (fieldname, operator, value) {
     matches[fieldname] = { $gte: value[0], $lte: value[1] }
   } else if (operator === QLOperator.getValue('IN').value) {
     let fixedArray = value
-    if(value && fieldname.endsWith('_id')){
+    if (value && fieldname.endsWith('_id')) {
       fixedArray = []
-      for (let index = 0; index < value.length; index++) {
-        const element = value[index];
+      for (const element of value) {
         fixedArray.push(new mongoose.Types.ObjectId(element))
       }
     }
     matches[fieldname] = { $in: fixedArray }
   } else if (operator === QLOperator.getValue('NIN').value) {
     let fixedArray = value
-    if(value && fieldname.endsWith('_id')){
+    if (value && fieldname.endsWith('_id')) {
       fixedArray = []
-      for (let index = 0; index < value.length; index++) {
-        const element = value[index];
+      for (const element of value) {
         fixedArray.push(new mongoose.Types.ObjectId(element))
       }
     }
@@ -1031,7 +1000,7 @@ const buildQueryTerms = async function (filterField, qlField, fieldName) {
   const matchesClauses = {}
 
   if (qlField.type instanceof GraphQLScalarType || isNonNullOfType(qlField.type, GraphQLScalarType)) {
-    matchesClauses[fieldName] = buildMatchesClause(fieldName === "id"?"_id":fieldName, filterField.operator, filterField.value)
+    matchesClauses[fieldName] = buildMatchesClause(fieldName === 'id' ? '_id' : fieldName, filterField.operator, filterField.value)
   } else if (qlField.type instanceof GraphQLObjectType || qlField.type instanceof GraphQLList || isNonNullOfType(qlField.type, GraphQLObjectType)) {
     let fieldType = qlField.type
 
@@ -1075,7 +1044,7 @@ const buildQueryTerms = async function (filterField, qlField, fieldName) {
       }
 
       if (term.path.indexOf('.') < 0) {
-        matchesClauses[fieldName] = buildMatchesClause(fieldName + '.' + (fieldType.getFields()[term.path].name === "id"?"_id":term.path) , term.operator, term.value)
+        matchesClauses[fieldName] = buildMatchesClause(fieldName + '.' + (fieldType.getFields()[term.path].name === 'id' ? '_id' : term.path), term.operator, term.value)
       } else {
         let currentGQLPathFieldType = qlField.type
         if (currentGQLPathFieldType instanceof GraphQLList || currentGQLPathFieldType instanceof GraphQLNonNull) {
@@ -1087,7 +1056,7 @@ const buildQueryTerms = async function (filterField, qlField, fieldName) {
         term.path.split('.').forEach((pathFieldName) => {
           const pathField = currentGQLPathFieldType.getFields()[pathFieldName]
           if (pathField.type instanceof GraphQLScalarType || isNonNullOfType(pathField.type, GraphQLScalarType)) {
-            matchesClauses[aliasPath + '_' + pathFieldName] = buildMatchesClause(aliasPath + (embeddedPath !== '' ? '.' + embeddedPath + '.' : '.') + (pathFieldName === "id"?"_id":pathFieldName), term.operator, term.value)
+            matchesClauses[aliasPath + '_' + pathFieldName] = buildMatchesClause(aliasPath + (embeddedPath !== '' ? '.' + embeddedPath + '.' : '.') + (pathFieldName === 'id' ? '_id' : pathFieldName), term.operator, term.value)
             embeddedPath = ''
           } else if (pathField.type instanceof GraphQLObjectType || pathField.type instanceof GraphQLList || isNonNullOfType(pathField.type, GraphQLObjectType)) {
             let pathFieldType = pathField.type
