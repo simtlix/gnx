@@ -527,12 +527,11 @@ const materializeModel = async function (args, gqltype, linkToParent) {
   return { modelArgs: modelArgs, collectionFields: collectionFields }
 }
 
-
 const executeRegisteredMutation = async function (args, callback) {
   const session = await mongoose.startSession()
   await session.startTransaction()
   try {
-    let newObject = await callback(args)
+    const newObject = await callback(args)
     await session.commitTransaction()
     return newObject
   } catch (error) {
@@ -790,12 +789,12 @@ const buildMutation = function (name) {
 
     rootQueryArgs.fields[entry] = {
       type: registeredMutation.outputModel,
+      description: registeredMutation.description,
       args: argsObject,
       async resolve (parent, args) {
-        return await executeOperation(args.input, registeredMutation.callback)
+        return executeRegisteredMutation(args.input, registeredMutation.callback)
       }
     }
-
   }
 
   return new GraphQLObjectType(rootQueryArgs)
@@ -877,13 +876,14 @@ module.exports.createSchema = function () {
 }
 
 module.exports.getModel = gqltype => typesDict.types[gqltype.name].model
-const registeredMutations = {}
 
-module.exports.registerMutation = function (name,inputModel, outputModel, callback){
+const registeredMutations = {}
+module.exports.registerMutation = function (name, description, inputModel, outputModel, callback) {
   registeredMutations[name] = {
-    inputModel: inputModel,
-    outputModel: outputModel,
-    callback: callback
+    description,
+    inputModel,
+    outputModel,
+    callback
   }
 }
 
