@@ -527,6 +527,22 @@ const materializeModel = async function (args, gqltype, linkToParent) {
   return { modelArgs: modelArgs, collectionFields: collectionFields }
 }
 
+
+const executeRegisteredMutation = async function (args, callback) {
+  const session = await mongoose.startSession()
+  await session.startTransaction()
+  try {
+    let newObject = await callback(args)
+    await session.commitTransaction()
+    return newObject
+  } catch (error) {
+    await session.abortTransaction()
+    throw error
+  } finally {
+    session.endSession()
+  }
+}
+
 const executeOperation = async function (Model, gqltype, controller, args, operation, actionField) {
   const session = await mongoose.startSession()
   await session.startTransaction()
@@ -768,6 +784,20 @@ const buildMutation = function (name) {
     }
   }
 
+  for (const entry in registeredMutations) {
+    const registeredMutation = registeredMutations[entry]
+    const argsObject = { input: { type: new GraphQLNonNull(registeredMutation.inputModel) } }
+
+    rootQueryArgs.fields[entry] = {
+      type: registeredMutation.outputModel,
+      args: argsObject,
+      async resolve (parent, args) {
+        return await executeOperation(args.input, registeredMutation.callback)
+      }
+    }
+
+  }
+
   return new GraphQLObjectType(rootQueryArgs)
 }
 
@@ -847,6 +877,15 @@ module.exports.createSchema = function () {
 }
 
 module.exports.getModel = gqltype => typesDict.types[gqltype.name].model
+const registeredMutations = {}
+
+module.exports.registerMutation = function (name,inputModel, outputModel, callback){
+  registeredMutations[name] = {
+    inputModel: inputModel,
+    outputModel: outputModel,
+    callback: callback
+  }
+}
 
 module.exports.connect = function (model, gqltype, simpleEntityEndpointName, listEntitiesEndpointName, controller, onModelCreated, stateMachine) {
   waitingInputType[gqltype.name] = {
