@@ -389,13 +389,22 @@ const buildPendingInputTypes = function (waitingInputType) {
   }
 }
 
-const buildRootQuery = function (name) {
+const buildRootQuery = function (name, includedTypes) {
   const rootQueryArgs = {}
   rootQueryArgs.name = name
   rootQueryArgs.fields = {}
 
   for (const entry in typesDict.types) {
     const type = typesDict.types[entry]
+
+    if(shouldNotBeIncludedInSchema(includedTypes, type.gqltype)){
+      continue
+    }
+
+    const wasAddedAsNoEnpointType = !type.simpleEntityEndpointName
+    if(wasAddedAsNoEnpointType){
+      continue
+    }
 
     // Fixing resolve method in order to be compliant with Mongo _id field
     if (type.gqltype.getFields().id && !type.gqltype.getFields().id.resolve) {
@@ -723,7 +732,7 @@ const executeItemFunction = async function (gqltype, collectionField, objectId, 
   }
 }
 
-const buildMutation = function (name) {
+const buildMutation = function (name, includedMutationTypes, includedCustomMutations) {
   const rootQueryArgs = {}
   rootQueryArgs.name = name
   rootQueryArgs.fields = {}
@@ -732,6 +741,10 @@ const buildMutation = function (name) {
 
   for (const entry in typesDict.types) {
     const type = typesDict.types[entry]
+
+    if(shouldNotBeIncludedInSchema(includedMutationTypes, type.gqltype)){
+      continue
+    }
 
     if (type.endpoint) {
       const argsObject = { input: { type: new GraphQLNonNull(type.inputType) } }
@@ -755,6 +768,10 @@ const buildMutation = function (name) {
 
   for (const entry in typesDictForUpdate.types) {
     const type = typesDictForUpdate.types[entry]
+
+    if(shouldNotBeIncludedInSchema(includedMutationTypes, type.gqltype)){
+      continue
+    }
 
     if (type.endpoint) {
       const argsObject = { input: { type: new GraphQLNonNull(type.inputType) } }
@@ -784,6 +801,11 @@ const buildMutation = function (name) {
   }
 
   for (const entry in registeredMutations) {
+
+    if(shouldNotBeIncludedInSchema(includedCustomMutations, entry)){
+      continue
+    }
+
     const registeredMutation = registeredMutations[entry]
     const argsObject = { input: { type: new GraphQLNonNull(registeredMutation.inputModel) } }
 
@@ -868,10 +890,10 @@ const typesDictForUpdate = { types: {} }
 
 /* Creating a new GraphQL Schema, with options query which defines query
 we will allow users to use when they are making request. */
-module.exports.createSchema = function () {
+module.exports.createSchema = function (includedQueryTypes, includedMutationTypes, includedCustomMutations) {
   return new GraphQLSchema({
-    query: buildRootQuery('RootQueryType'),
-    mutation: buildMutation('Mutation')
+    query: buildRootQuery('RootQueryType', includedQueryTypes),
+    mutation: buildMutation('Mutation', includedMutationTypes, includedCustomMutations)
   })
 }
 
@@ -1154,3 +1176,7 @@ const buildQueryTerms = async function (filterField, qlField, fieldName) {
   }
   return { aggregateClauses: aggregateClauses, matchesClauses: matchesClauses }
 }
+const shouldNotBeIncludedInSchema = function (includedTypes, type) {
+  return includedTypes && !includedTypes.includes(type)
+}
+
