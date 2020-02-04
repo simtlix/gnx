@@ -46,7 +46,8 @@ const buildErrorFormatter = (callback) => {
     }
 
     if (callback) {
-      callback(result)
+      const formattedError = callback(result)
+      return formattedError ? result : formattedError
     }
     return result
   }
