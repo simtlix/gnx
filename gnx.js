@@ -47,7 +47,7 @@ const buildErrorFormatter = (callback) => {
 
     if (callback) {
       const formattedError = callback(result)
-      return formattedError ? result : formattedError
+      return formattedError || result
     }
     return result
   }
@@ -398,12 +398,12 @@ const buildRootQuery = function (name, includedTypes) {
   for (const entry in typesDict.types) {
     const type = typesDict.types[entry]
 
-    if(shouldNotBeIncludedInSchema(includedTypes, type.gqltype)){
+    if (shouldNotBeIncludedInSchema(includedTypes, type.gqltype)) {
       continue
     }
 
     const wasAddedAsNoEnpointType = !type.simpleEntityEndpointName
-    if(wasAddedAsNoEnpointType){
+    if (wasAddedAsNoEnpointType) {
       continue
     }
 
@@ -743,7 +743,7 @@ const buildMutation = function (name, includedMutationTypes, includedCustomMutat
   for (const entry in typesDict.types) {
     const type = typesDict.types[entry]
 
-    if(shouldNotBeIncludedInSchema(includedMutationTypes, type.gqltype)){
+    if (shouldNotBeIncludedInSchema(includedMutationTypes, type.gqltype)) {
       continue
     }
 
@@ -770,7 +770,7 @@ const buildMutation = function (name, includedMutationTypes, includedCustomMutat
   for (const entry in typesDictForUpdate.types) {
     const type = typesDictForUpdate.types[entry]
 
-    if(shouldNotBeIncludedInSchema(includedMutationTypes, type.gqltype)){
+    if (shouldNotBeIncludedInSchema(includedMutationTypes, type.gqltype)) {
       continue
     }
 
@@ -802,8 +802,7 @@ const buildMutation = function (name, includedMutationTypes, includedCustomMutat
   }
 
   for (const entry in registeredMutations) {
-
-    if(shouldNotBeIncludedInSchema(includedCustomMutations, entry)){
+    if (shouldNotBeIncludedInSchema(includedCustomMutations, entry)) {
       continue
     }
 
@@ -1180,4 +1179,3 @@ const buildQueryTerms = async function (filterField, qlField, fieldName) {
 const shouldNotBeIncludedInSchema = function (includedTypes, type) {
   return includedTypes && !includedTypes.includes(type)
 }
-
