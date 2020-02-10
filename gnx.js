@@ -335,6 +335,11 @@ const buildInputType = function (gqltype) {
   return { inputTypeBody: inputTypeForAdd, inputTypeBodyForUpdate: inputTypeForUpdate }
 }
 
+const getInputType = function (type) {
+  return typesDict.types[type.name].inputType
+}
+module.exports.getInputType = getInputType
+
 const createOneToManyInputType = function (inputNamePrefix, fieldEntryName, inputType, updateInputType) {
   return new GraphQLInputObjectType({
     name: 'OneToMany' + inputNamePrefix + fieldEntryName,
@@ -807,8 +812,8 @@ const buildMutation = function (name, includedMutationTypes, includedCustomMutat
     }
 
     const registeredMutation = registeredMutations[entry]
-    const argsObject = { input: { type: new GraphQLNonNull(registeredMutation.inputModel) } }
 
+    const argsObject = { input: { type: new GraphQLNonNull(registeredMutation.inputModel) } }
     rootQueryArgs.fields[entry] = {
       type: registeredMutation.outputModel,
       description: registeredMutation.description,
