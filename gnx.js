@@ -498,7 +498,7 @@ const materializeModel = async function (args, gqltype, linkToParent, operation)
           modelArgs[fieldEntry.extensions.relation.connectionField] = new mongoose.Types.ObjectId(args[fieldEntryName].id)
         } else {
           const fieldType = fieldEntry.type instanceof GraphQLNonNull ? fieldEntry.type.ofType : fieldEntry.type
-          modelArgs[fieldEntryName] = (await materializeModel(args[fieldEntryName], fieldType), null, operation).modelArgs
+          modelArgs[fieldEntryName] = (await materializeModel(args[fieldEntryName], fieldType, null, operation)).modelArgs
         }
       } else {
         console.warn('Configuration issue: Field ' + fieldEntryName + ' does not define extensions.relation')
