@@ -541,7 +541,7 @@ const executeRegisteredMutation = async function (args, callback) {
   const session = await mongoose.startSession()
   await session.startTransaction()
   try {
-    const newObject = await callback(args)
+    const newObject = await callback(args, session)
     await session.commitTransaction()
     return newObject
   } catch (error) {
@@ -583,7 +583,7 @@ const executeOperation = async function (Model, gqltype, controller, args, opera
 }
 
 const onDeleteObject = async function (Model, gqltype, controller, args, session, linkToParent) {
-  const result = await materializeModel(args, gqltype, linkToParent, "DELETE")
+  const result = await materializeModel(args, gqltype, linkToParent, 'DELETE')
   const deletedObject = new Model(result.modelArgs)
 
   if (controller && controller.onDelete) {
@@ -612,7 +612,7 @@ const onStateChanged = async function (Model, gqltype, controller, args, session
 }
 
 const onUpdateSubject = async function (Model, gqltype, controller, args, session, linkToParent) {
-  const materializedModel = await materializeModel(args, gqltype, linkToParent, "UPDATE")
+  const materializedModel = await materializeModel(args, gqltype, linkToParent, 'UPDATE')
   const objectId = args.id
 
   if (materializedModel.collectionFields) {
@@ -659,7 +659,7 @@ const onUpdateSubject = async function (Model, gqltype, controller, args, sessio
 }
 
 const onSaveObject = async function (Model, gqltype, controller, args, session, linkToParent) {
-  const materializedModel = await materializeModel(args, gqltype, linkToParent, "CREATE")
+  const materializedModel = await materializeModel(args, gqltype, linkToParent, 'CREATE')
 
   if (typesDict.types[gqltype.name].stateMachine) {
     materializedModel.modelArgs.state = typesDict.types[gqltype.name].stateMachine.initialState.name
