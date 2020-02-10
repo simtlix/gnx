@@ -466,7 +466,7 @@ const buildRootQuery = function (name, includedTypes) {
 
 const isEmpty = value => !value && value !== false
 
-const materializeModel = async function (args, gqltype, linkToParent) {
+const materializeModel = async function (args, gqltype, linkToParent, operation) {
   if (!args) {
     return null
   }
@@ -479,8 +479,8 @@ const materializeModel = async function (args, gqltype, linkToParent) {
   for (const fieldEntryName in argTypes) {
     const fieldEntry = argTypes[fieldEntryName]
 
-    if (fieldEntry.extensions && fieldEntry.extensions.validations) {
-      for (const validator of fieldEntry.extensions.validations) {
+    if (fieldEntry.extensions && fieldEntry.extensions.validations && fieldEntry.extensions.validations[operation]) {
+      for (const validator of fieldEntry.extensions.validations[operation]) {
         await validator.validate(gqltype.name, fieldEntryName, args[fieldEntryName])
       }
     }
@@ -498,7 +498,7 @@ const materializeModel = async function (args, gqltype, linkToParent) {
           modelArgs[fieldEntry.extensions.relation.connectionField] = new mongoose.Types.ObjectId(args[fieldEntryName].id)
         } else {
           const fieldType = fieldEntry.type instanceof GraphQLNonNull ? fieldEntry.type.ofType : fieldEntry.type
-          modelArgs[fieldEntryName] = (await materializeModel(args[fieldEntryName], fieldType)).modelArgs
+          modelArgs[fieldEntryName] = (await materializeModel(args[fieldEntryName], fieldType), null, operation).modelArgs
         }
       } else {
         console.warn('Configuration issue: Field ' + fieldEntryName + ' does not define extensions.relation')
@@ -512,7 +512,7 @@ const materializeModel = async function (args, gqltype, linkToParent) {
           const collectionEntries = []
 
           for (const element of args[fieldEntryName]) {
-            const collectionEntry = (await materializeModel(element, ofType)).modelArgs
+            const collectionEntry = (await materializeModel(element, ofType, null, operation)).modelArgs
             if (collectionEntry) {
               collectionEntries.push(collectionEntry)
             }
@@ -528,8 +528,8 @@ const materializeModel = async function (args, gqltype, linkToParent) {
     linkToParent(modelArgs)
   }
 
-  if (gqltype.extensions && gqltype.extensions.validations) {
-    for (const validator of gqltype.extensions.validations) {
+  if (gqltype.extensions && gqltype.extensions.validations && gqltype.extensions.validations[operation]) {
+    for (const validator of gqltype.extensions.validations[operation]) {
       await validator.validate(gqltype.name, args, modelArgs)
     }
   }
@@ -583,7 +583,7 @@ const executeOperation = async function (Model, gqltype, controller, args, opera
 }
 
 const onDeleteObject = async function (Model, gqltype, controller, args, session, linkToParent) {
-  const result = await materializeModel(args, gqltype, linkToParent)
+  const result = await materializeModel(args, gqltype, linkToParent, "DELETE")
   const deletedObject = new Model(result.modelArgs)
 
   if (controller && controller.onDelete) {
@@ -612,7 +612,7 @@ const onStateChanged = async function (Model, gqltype, controller, args, session
 }
 
 const onUpdateSubject = async function (Model, gqltype, controller, args, session, linkToParent) {
-  const materializedModel = await materializeModel(args, gqltype, linkToParent)
+  const materializedModel = await materializeModel(args, gqltype, linkToParent, "UPDATE")
   const objectId = args.id
 
   if (materializedModel.collectionFields) {
@@ -659,7 +659,7 @@ const onUpdateSubject = async function (Model, gqltype, controller, args, sessio
 }
 
 const onSaveObject = async function (Model, gqltype, controller, args, session, linkToParent) {
-  const materializedModel = await materializeModel(args, gqltype, linkToParent)
+  const materializedModel = await materializeModel(args, gqltype, linkToParent, "CREATE")
 
   if (typesDict.types[gqltype.name].stateMachine) {
     materializedModel.modelArgs.state = typesDict.types[gqltype.name].stateMachine.initialState.name
