@@ -338,7 +338,7 @@ const buildInputType = function (gqltype) {
 const getInputType = function (type) {
   return typesDict.types[type.name].inputType
 }
-exports.getInputType = getInputType
+module.exports.getInputType = getInputType
 
 const createOneToManyInputType = function (inputNamePrefix, fieldEntryName, inputType, updateInputType) {
   return new GraphQLInputObjectType({
