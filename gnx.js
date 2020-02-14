@@ -581,6 +581,7 @@ const executeOperation = async function (Model, gqltype, controller, args, opera
         break
     }
     await session.commitTransaction()
+    session.endSession()
     return newObject
   } catch (error) {
     await session.abortTransaction()
