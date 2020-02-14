@@ -542,23 +542,27 @@ const materializeModel = async function (args, gqltype, linkToParent, operation)
   return { modelArgs: modelArgs, collectionFields: collectionFields }
 }
 
-const executeRegisteredMutation = async function (args, callback) {
-  const session = await mongoose.startSession()
+const executeRegisteredMutation = async function (args, callback, session) {
+  session = session || await mongoose.startSession()
   await session.startTransaction()
   try {
     const newObject = await callback(args, session)
     await session.commitTransaction()
+    session.endSession()
     return newObject
   } catch (error) {
     await session.abortTransaction()
-    throw error
-  } finally {
-    session.endSession()
+    if (error.errorLabels && error.errorLabels.includes('TransientTransactionError')) {
+      return executeRegisteredMutation(args, callback, session)
+    } else {
+      session.endSession()
+      throw error
+    }
   }
 }
 
-const executeOperation = async function (Model, gqltype, controller, args, operation, actionField) {
-  const session = await mongoose.startSession()
+const executeOperation = async function (Model, gqltype, controller, args, operation, actionField, session) {
+  session = session || await mongoose.startSession()
   await session.startTransaction()
   try {
     let newObject = null
@@ -576,14 +580,17 @@ const executeOperation = async function (Model, gqltype, controller, args, opera
         newObject = await onStateChanged(Model, gqltype, controller, args, session, actionField)
         break
     }
-    console.log('before transaction')
     await session.commitTransaction()
+    session.endSession()
     return newObject
   } catch (error) {
     await session.abortTransaction()
-    throw error
-  } finally {
-    session.endSession()
+    if (error.errorLabels && error.errorLabels.includes('TransientTransactionError')) {
+      return executeOperation(Model, gqltype, controller, args, operation, actionField, session)
+    } else {
+      session.endSession()
+      throw error
+    }
   }
 }
 
