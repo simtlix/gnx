@@ -542,18 +542,22 @@ const materializeModel = async function (args, gqltype, linkToParent, operation)
   return { modelArgs: modelArgs, collectionFields: collectionFields }
 }
 
-const executeRegisteredMutation = async function (args, callback) {
-  const session = await mongoose.startSession()
+const executeRegisteredMutation = async function (args, callback, session = null) {
+  session = session || await mongoose.startSession()
   await session.startTransaction()
   try {
     const newObject = await callback(args, session)
     await session.commitTransaction()
+    session.endSession()
     return newObject
   } catch (error) {
     await session.abortTransaction()
-    throw error
-  } finally {
-    session.endSession()
+    if (error.errorLabels && error.errorLabels.indexOf('TransientTransactionError') >= 0) {
+      return executeRegisteredMutation(args, callback, session)
+    } else {
+      session.endSession()
+      throw error
+    }
   }
 }
 
