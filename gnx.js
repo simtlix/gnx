@@ -552,7 +552,7 @@ const executeRegisteredMutation = async function (args, callback, session) {
     return newObject
   } catch (error) {
     await session.abortTransaction()
-    if (error.errorLabels && error.errorLabels.indexOf('TransientTransactionError') >= 0) {
+    if (error.errorLabels && error.errorLabels.includes('TransientTransactionError')) {
       return executeRegisteredMutation(args, callback, session)
     } else {
       session.endSession()
@@ -585,7 +585,7 @@ const executeOperation = async function (Model, gqltype, controller, args, opera
     return newObject
   } catch (error) {
     await session.abortTransaction()
-    if (error.errorLabels && error.errorLabels.indexOf('TransientTransactionError') >= 0) {
+    if (error.errorLabels && error.errorLabels.includes('TransientTransactionError')) {
       return executeOperation(Model, gqltype, controller, args, operation, actionField, session)
     } else {
       session.endSession()
