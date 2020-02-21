@@ -820,7 +820,7 @@ const buildMutation = function (name, includedMutationTypes, includedCustomMutat
 
     const registeredMutation = registeredMutations[entry]
 
-    const argsObject = { input: { type: new GraphQLNonNull(registeredMutation.inputModel) } }
+    const argsObject = registeredMutation.inputModel ? { input: { type: new GraphQLNonNull(registeredMutation.inputModel) } } : null
     rootQueryArgs.fields[entry] = {
       type: registeredMutation.outputModel,
       description: registeredMutation.description,
