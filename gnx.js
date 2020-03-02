@@ -169,34 +169,34 @@ const QLOperator = new GraphQLEnumType({
   name: 'QLOperator',
   values: {
     EQ: {
-      value: 0
+      value: 'EQ'
     },
     LT: {
-      value: 1
+      value: 'LT'
     },
     GT: {
-      value: 2
+      value: 'GT'
     },
     LTE: {
-      value: 3
+      value: 'LTE'
     },
     GTE: {
-      value: 4
+      value: 'GTE'
     },
     BTW: {
-      value: 5
+      value: 'BTW'
     },
     NE: {
-      value: 6
+      value: 'NE'
     },
     IN: {
-      value: 7
+      value: 'IN'
     },
     NIN: {
-      value: 8
+      value: 'NIN'
     },
     LIKE: {
-      value: 9
+      value: 'LIKE'
     }
   }
 })
