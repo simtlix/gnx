@@ -599,7 +599,7 @@ const onDeleteObject = async function (Model, gqltype, controller, args, session
   const deletedObject = new Model(result.modelArgs)
 
   if (controller && controller.onDelete) {
-    await controller.onDelete(deletedObject)
+    await controller.onDelete(deletedObject, session)
   }
 
   return Model.findByIdAndDelete(args, deletedObject.modelArgs).session(session)
@@ -656,7 +656,7 @@ const onUpdateSubject = async function (Model, gqltype, controller, args, sessio
   }
 
   if (controller && controller.onUpdating) {
-    await controller.onUpdating(objectId, modifiedObject, args)
+    await controller.onUpdating(objectId, modifiedObject, args, session)
   }
 
   const result = Model.findByIdAndUpdate(
@@ -664,7 +664,7 @@ const onUpdateSubject = async function (Model, gqltype, controller, args, sessio
   )
 
   if (controller && controller.onUpdated) {
-    await controller.onUpdated(result, args)
+    await controller.onUpdated(result, args, session)
   }
 
   return result
@@ -682,7 +682,7 @@ const onSaveObject = async function (Model, gqltype, controller, args, session, 
   newObject.$session(session)
 
   if (controller && controller.onSaving) {
-    await controller.onSaving(newObject, args)
+    await controller.onSaving(newObject, args, session)
   }
 
   if (materializedModel.collectionFields) {
@@ -692,7 +692,7 @@ const onSaveObject = async function (Model, gqltype, controller, args, session, 
   let result = await newObject.save()
   result = result.toObject()
   if (controller && controller.onSaved) {
-    await controller.onSaved(result, args)
+    await controller.onSaved(result, args, session)
   }
   if (typesDict.types[gqltype.name].stateMachine) {
     result.state = typesDict.types[gqltype.name].stateMachine.initialState.value
