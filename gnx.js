@@ -469,7 +469,7 @@ const buildRootQuery = function (name, includedTypes) {
   return new GraphQLObjectType(rootQueryArgs)
 }
 
-const isEmpty = value => !value && value !== false
+const isEmpty = value => !value && value !== false && value !== 0
 
 const materializeModel = async function (args, gqltype, linkToParent, operation) {
   if (!args) {
