@@ -623,10 +623,6 @@ const onStateChanged = async function (Model, gqltype, controller, args, session
   }
 }
 
-// const updateObject = () => {
-
-// }
-
 const onUpdateSubject = async function (Model, gqltype, controller, args, session, linkToParent) {
   const materializedModel = await materializeModel(args, gqltype, linkToParent, 'UPDATE', session)
   const objectId = args.id
