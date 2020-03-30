@@ -623,6 +623,10 @@ const onStateChanged = async function (Model, gqltype, controller, args, session
   }
 }
 
+// const updateObject = () => {
+
+// }
+
 const onUpdateSubject = async function (Model, gqltype, controller, args, session, linkToParent) {
   const materializedModel = await materializeModel(args, gqltype, linkToParent, 'UPDATE', session)
   const objectId = args.id
@@ -670,9 +674,14 @@ const onUpdateSubject = async function (Model, gqltype, controller, args, sessio
   return result
 }
 
+const saveObject = async (typeName, args, session) => {
+  const type = typesDict.types[typeName]
+  return onSaveObject(type.model, type.gqltype, type.controller, args, session)
+}
+module.exports.saveObject = saveObject
+
 const onSaveObject = async function (Model, gqltype, controller, args, session, linkToParent) {
   const materializedModel = await materializeModel(args, gqltype, linkToParent, 'CREATE', session)
-
   if (typesDict.types[gqltype.name].stateMachine) {
     materializedModel.modelArgs.state = typesDict.types[gqltype.name].stateMachine.initialState.name
   }
