@@ -471,7 +471,7 @@ const buildRootQuery = function (name, includedTypes) {
 
 const isEmpty = value => !value && value !== false && value !== 0
 
-const materializeModel = async function (args, gqltype, linkToParent, operation) {
+const materializeModel = async function (args, gqltype, linkToParent, operation, session) {
   if (!args) {
     return null
   }
@@ -486,7 +486,7 @@ const materializeModel = async function (args, gqltype, linkToParent, operation)
 
     if (fieldEntry.extensions && fieldEntry.extensions.validations && fieldEntry.extensions.validations[operation]) {
       for (const validator of fieldEntry.extensions.validations[operation]) {
-        await validator.validate(gqltype.name, fieldEntryName, args[fieldEntryName])
+        await validator.validate(gqltype.name, fieldEntryName, args[fieldEntryName], session)
       }
     }
 
@@ -503,7 +503,7 @@ const materializeModel = async function (args, gqltype, linkToParent, operation)
           modelArgs[fieldEntry.extensions.relation.connectionField] = new mongoose.Types.ObjectId(args[fieldEntryName].id)
         } else {
           const fieldType = fieldEntry.type instanceof GraphQLNonNull ? fieldEntry.type.ofType : fieldEntry.type
-          modelArgs[fieldEntryName] = (await materializeModel(args[fieldEntryName], fieldType, null, operation)).modelArgs
+          modelArgs[fieldEntryName] = (await materializeModel(args[fieldEntryName], fieldType, null, operation, session)).modelArgs
         }
       } else {
         console.warn('Configuration issue: Field ' + fieldEntryName + ' does not define extensions.relation')
@@ -517,7 +517,7 @@ const materializeModel = async function (args, gqltype, linkToParent, operation)
           const collectionEntries = []
 
           for (const element of args[fieldEntryName]) {
-            const collectionEntry = (await materializeModel(element, ofType, null, operation)).modelArgs
+            const collectionEntry = (await materializeModel(element, ofType, null, operation, session)).modelArgs
             if (collectionEntry) {
               collectionEntries.push(collectionEntry)
             }
@@ -535,7 +535,7 @@ const materializeModel = async function (args, gqltype, linkToParent, operation)
 
   if (gqltype.extensions && gqltype.extensions.validations && gqltype.extensions.validations[operation]) {
     for (const validator of gqltype.extensions.validations[operation]) {
-      await validator.validate(gqltype.name, args, modelArgs)
+      await validator.validate(gqltype.name, args, modelArgs, session)
     }
   }
 
@@ -595,7 +595,7 @@ const executeOperation = async function (Model, gqltype, controller, args, opera
 }
 
 const onDeleteObject = async function (Model, gqltype, controller, args, session, linkToParent) {
-  const result = await materializeModel(args, gqltype, linkToParent, 'DELETE')
+  const result = await materializeModel(args, gqltype, linkToParent, 'DELETE', session)
   const deletedObject = new Model(result.modelArgs)
 
   if (controller && controller.onDelete) {
@@ -624,7 +624,7 @@ const onStateChanged = async function (Model, gqltype, controller, args, session
 }
 
 const onUpdateSubject = async function (Model, gqltype, controller, args, session, linkToParent) {
-  const materializedModel = await materializeModel(args, gqltype, linkToParent, 'UPDATE')
+  const materializedModel = await materializeModel(args, gqltype, linkToParent, 'UPDATE', session)
   const objectId = args.id
 
   if (materializedModel.collectionFields) {
@@ -671,7 +671,7 @@ const onUpdateSubject = async function (Model, gqltype, controller, args, sessio
 }
 
 const onSaveObject = async function (Model, gqltype, controller, args, session, linkToParent) {
-  const materializedModel = await materializeModel(args, gqltype, linkToParent, 'CREATE')
+  const materializedModel = await materializeModel(args, gqltype, linkToParent, 'CREATE', session)
 
   if (typesDict.types[gqltype.name].stateMachine) {
     materializedModel.modelArgs.state = typesDict.types[gqltype.name].stateMachine.initialState.name
