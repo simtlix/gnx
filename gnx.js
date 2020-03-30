@@ -670,11 +670,10 @@ const onUpdateSubject = async function (Model, gqltype, controller, args, sessio
   return result
 }
 
-const saveObject = async (typeName, args, session) => {
+module.exports.saveObject = async (typeName, args, session) => {
   const type = typesDict.types[typeName]
   return onSaveObject(type.model, type.gqltype, type.controller, args, session)
 }
-module.exports.saveObject = saveObject
 
 const onSaveObject = async function (Model, gqltype, controller, args, session, linkToParent) {
   const materializedModel = await materializeModel(args, gqltype, linkToParent, 'CREATE', session)
