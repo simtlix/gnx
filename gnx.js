@@ -517,7 +517,7 @@ const materializeModel = async function (args, gqltype, linkToParent, operation,
           const collectionEntries = []
 
           for (const element of args[fieldEntryName]) {
-            const collectionEntry = (await materializeModel(element, ofType, null, operation)).modelArgs
+            const collectionEntry = (await materializeModel(element, ofType, null, operation, session)).modelArgs
             if (collectionEntry) {
               collectionEntries.push(collectionEntry)
             }
@@ -595,7 +595,7 @@ const executeOperation = async function (Model, gqltype, controller, args, opera
 }
 
 const onDeleteObject = async function (Model, gqltype, controller, args, session, linkToParent) {
-  const result = await materializeModel(args, gqltype, linkToParent, 'DELETE')
+  const result = await materializeModel(args, gqltype, linkToParent, 'DELETE', session)
   const deletedObject = new Model(result.modelArgs)
 
   if (controller && controller.onDelete) {
