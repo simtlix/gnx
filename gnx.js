@@ -16,14 +16,15 @@ const operations = {
 }
 
 class GNXError extends Error {
-  constructor (message, code) {
+  constructor (message, code, status) {
     super(message)
     this.extensions = {
       code: code,
+      status: status,
       timestamp: new Date().toUTCString()
     }
-
     this.getCode = () => this.extensions.code
+    this.getStatus = () => this.extensions.status
     this.getTimestamp = () => this.extensions.timestamp
   }
 }
@@ -607,7 +608,9 @@ const onDeleteObject = async function (Model, gqltype, controller, args, session
 
 const onStateChanged = async function (Model, gqltype, controller, args, session, actionField) {
   const storedModel = await Model.findById(args.id)
-
+  if (!storedModel) {
+    throw new GNXError(`${gqltype.name} ${args.id} is not valid`, 'NOT_VALID_ID', 404)
+  }
   if (storedModel.state === actionField.from.name) {
     if (actionField.action) {
       await actionField.action(args, session)
