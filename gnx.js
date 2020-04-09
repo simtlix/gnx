@@ -158,10 +158,10 @@ const QLSortOrder = new GraphQLEnumType({
   name: 'QLSortOrder',
   values: {
     DESC: {
-      value: -1
+      value: 'DESC'
     },
     ASC: {
-      value: 1
+      value: 'ASC'
     }
   }
 })
@@ -1007,6 +1007,7 @@ const buildQuery = async function (input, gqltype) {
       const sortExpressions = {}
       input[key].terms.forEach(function (sort) {
         console.log(sort)
+        sort.order === 'ASC' ? sort.order = 1 : sort.order = -1
         sortExpressions[sort.field] = sort.order
       })
       sortClause = { $sort: sortExpressions }
@@ -1080,6 +1081,9 @@ const buildQueryTerms = async function (filterField, qlField, fieldName) {
   const matchesClauses = {}
 
   if (qlField.type instanceof GraphQLScalarType || isNonNullOfType(qlField.type, GraphQLScalarType)) {
+    if (qlField.type.name === 'DateTime') {
+      filterField.value = new Date(filterField.value)
+    }
     matchesClauses[fieldName] = buildMatchesClause(fieldName === 'id' ? '_id' : fieldName, filterField.operator, filterField.value)
   } else if (qlField.type instanceof GraphQLObjectType || qlField.type instanceof GraphQLList || isNonNullOfType(qlField.type, GraphQLObjectType)) {
     let fieldType = qlField.type
@@ -1124,6 +1128,9 @@ const buildQueryTerms = async function (filterField, qlField, fieldName) {
       }
 
       if (term.path.indexOf('.') < 0) {
+        if (fieldType.getFields()[term.path].type.name === 'DateTime') {
+          term.value = new Date(term.value)
+        }
         matchesClauses[fieldName] = buildMatchesClause(fieldName + '.' + (fieldType.getFields()[term.path].name === 'id' ? '_id' : term.path), term.operator, term.value)
       } else {
         let currentGQLPathFieldType = qlField.type
@@ -1136,6 +1143,9 @@ const buildQueryTerms = async function (filterField, qlField, fieldName) {
         term.path.split('.').forEach((pathFieldName) => {
           const pathField = currentGQLPathFieldType.getFields()[pathFieldName]
           if (pathField.type instanceof GraphQLScalarType || isNonNullOfType(pathField.type, GraphQLScalarType)) {
+            if (pathField.type.name === 'DateTime') {
+              term.value = new Date(term.value)
+            }
             matchesClauses[aliasPath + '_' + pathFieldName] = buildMatchesClause(aliasPath + (embeddedPath !== '' ? '.' + embeddedPath + '.' : '.') + (pathFieldName === 'id' ? '_id' : pathFieldName), term.operator, term.value)
             embeddedPath = ''
           } else if (pathField.type instanceof GraphQLObjectType || pathField.type instanceof GraphQLList || isNonNullOfType(pathField.type, GraphQLObjectType)) {
