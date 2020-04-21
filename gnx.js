@@ -1082,7 +1082,11 @@ const buildQueryTerms = async function (filterField, qlField, fieldName) {
 
   if (qlField.type instanceof GraphQLScalarType || isNonNullOfType(qlField.type, GraphQLScalarType)) {
     if (qlField.type.name === 'DateTime') {
-      filterField.value = new Date(filterField.value)
+      if (Array.isArray(filterField.value)) {
+        filterField.value = filterField.value.map(value => new Date(value))
+      } else {
+        filterField.value = new Date(filterField.value)
+      }
     }
     matchesClauses[fieldName] = buildMatchesClause(fieldName === 'id' ? '_id' : fieldName, filterField.operator, filterField.value)
   } else if (qlField.type instanceof GraphQLObjectType || qlField.type instanceof GraphQLList || isNonNullOfType(qlField.type, GraphQLObjectType)) {
@@ -1129,7 +1133,11 @@ const buildQueryTerms = async function (filterField, qlField, fieldName) {
 
       if (term.path.indexOf('.') < 0) {
         if (fieldType.getFields()[term.path].type.name === 'DateTime') {
-          term.value = new Date(term.value)
+          if (Array.isArray(term.value)) {
+            term.value = term.value.map(value => new Date(value))
+          } else {
+            term.value = new Date(term.value)
+          }
         }
         matchesClauses[fieldName] = buildMatchesClause(fieldName + '.' + (fieldType.getFields()[term.path].name === 'id' ? '_id' : term.path), term.operator, term.value)
       } else {
@@ -1144,7 +1152,11 @@ const buildQueryTerms = async function (filterField, qlField, fieldName) {
           const pathField = currentGQLPathFieldType.getFields()[pathFieldName]
           if (pathField.type instanceof GraphQLScalarType || isNonNullOfType(pathField.type, GraphQLScalarType)) {
             if (pathField.type.name === 'DateTime') {
-              term.value = new Date(term.value)
+              if (Array.isArray(term.value)) {
+                term.value = term.value.map(value => new Date(value))
+              } else {
+                term.value = new Date(term.value)
+              }
             }
             matchesClauses[aliasPath + '_' + pathFieldName] = buildMatchesClause(aliasPath + (embeddedPath !== '' ? '.' + embeddedPath + '.' : '.') + (pathFieldName === 'id' ? '_id' : pathFieldName), term.operator, term.value)
             embeddedPath = ''
