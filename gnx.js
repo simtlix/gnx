@@ -622,7 +622,7 @@ const onStateChanged = async function (Model, gqltype, controller, args, session
     result.state = actionField.to.value
     return result
   } else {
-    throw new GNXError('Action is not allowed from state ' + storedModel.state, 400)
+    throw new GNXError('Action is not allowed from state ' + storedModel.state, 'BAD_REQUEST', 400)
   }
 }
 
