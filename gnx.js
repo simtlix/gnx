@@ -8,6 +8,54 @@ const {
   GraphQLInt, GraphQLEnumType, GraphQLBoolean, GraphQLFloat
 } = graphql
 
+
+/*
+  Adding 'extensions' field into instronspection query so metadata can be used to generate UX
+*/
+const RelationType = new GraphQLObjectType({
+  name:'RelationType',
+  fields: ()=>(
+    {
+      embedded: { type: GraphQLBoolean },
+      connectionField: {type: GraphQLString}
+    }
+  )
+})
+
+const FieldExtensionsType = new GraphQLObjectType({
+  name:'FieldExtensionsType',
+  fields: ()=>(
+    {
+      relation: {
+        type: RelationType
+      }
+    }
+  )
+})
+
+const fieldTypeDefinitions = __Field._fields;
+
+const fixedFieldsWithExtensions = function(){
+  let originalFields = fieldTypeDefinitions()
+  originalFields.extensions = {
+      type: FieldExtensionsType,
+      name: 'extensions',
+      resolve: function resolve(obj) {
+        return obj.extensions;
+      },
+      args:[]
+    
+  }
+
+  return originalFields
+
+}
+
+__Field._fields = fixedFieldsWithExtensions
+
+//End of adding 'extensions' field to instrospection query
+
+
 const operations = {
   SAVE: 'save',
   UPDATE: 'update',
